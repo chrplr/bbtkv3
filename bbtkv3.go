@@ -1,4 +1,4 @@
-// Drive a BlackBoxToolKit to capture events
+// Interface to [Black Box Toolkit BBTKv3](https://www.blackboxtoolkit.com/bbtkv3.html)
 // Author: Christophe Pallier <christophe@pallier.org>
 // LICENSE: GPL-3.0
 
@@ -24,11 +24,7 @@ var (
 
 // default parameters
 var (
-	PortAddress    = "/dev/ttyUSB0"
-	Baudrate       = 115200
-	Duration       = 30
-	OutputFileName = "bbtk-capture-001.dat"
-	DEBUG          = false
+	DEBUG = false
 )
 
 type bbtkv3 struct {
@@ -76,7 +72,7 @@ var defaultSmoothingMask = SmoothingMask{
 	Opto1: false,
 }
 
-func NewBbtkv3(portAddress string, baudrate int) (*bbtkv3, error) {
+func NewBbtkv3(portAddress string, baudrate int, verbose bool) (*bbtkv3, error) {
 	var box bbtkv3
 
 	mode := &serial.Mode{
@@ -86,7 +82,7 @@ func NewBbtkv3(portAddress string, baudrate int) (*bbtkv3, error) {
 		StopBits: serial.OneStopBit,
 	}
 
-	if DEBUG {
+	if verbose {
 		fmt.Printf("Trying to connect to %v at %dbps...", portAddress, baudrate)
 	}
 	port, err := serial.Open(portAddress, mode)
@@ -94,7 +90,7 @@ func NewBbtkv3(portAddress string, baudrate int) (*bbtkv3, error) {
 		return nil, fmt.Errorf("Error while trying to open bbtkv3 at %s at %d bps: %w\n", portAddress, baudrate, err)
 	}
 
-	if DEBUG {
+	if verbose {
 		fmt.Println("Success!")
 	}
 
@@ -444,4 +440,3 @@ func WriteText(basename string, text string) error {
 
 	return err
 }
-

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/chrplr/bbtkv3"
@@ -20,6 +22,14 @@ var (
 	Build   string
 )
 
+var (
+	PortAddress    = "/dev/ttyUSB0"
+	Baudrate       = 115200
+	Duration       = 30
+	OutputFileName = "bbtk-capture-001.dat"
+	DEBUG          = false
+)
+
 var defaultSmoothingMask = bbtkv3.SmoothingMask{
 	Mic1:  true,
 	Mic2:  true,
@@ -29,13 +39,45 @@ var defaultSmoothingMask = bbtkv3.SmoothingMask{
 	Opto1: false,
 }
 
+func fileExists(filename string) bool {
+	_, err := os.Stat(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
+func WriteText(basename string, text string) error {
+	var filename string = basename
+
+	ext := filepath.Ext(basename)
+	name := strings.TrimSuffix(basename, ext)
+
+	for i := 2; fileExists(filename); i++ {
+		filename = fmt.Sprintf("%s-%03d%s", name, i, ext)
+	}
+
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	_, err = f.WriteString(text)
+
+	return err
+}
+
 func main() {
 
-	portPtr := flag.String("p", bbtkv3.PortAddress, "device (serial port name)")
-	speedPtr := flag.Int("b", bbtkv3.Baudrate, "baudrate (speed in bps)")
-	durationPtr := flag.Int("d", bbtkv3.Duration, "duration of capture (in s)")
-	outputFilenamePtr := flag.String("o", bbtkv3.OutputFileName, "output file name for captured data")
-	debugPtr := flag.Bool("D", bbtkv3.DEBUG, "Debug mode")
+	portPtr := flag.String("p", PortAddress, "device (serial port name)")
+	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
+	durationPtr := flag.Int("d", Duration, "duration of capture (in s)")
+	outputFilenamePtr := flag.String("o", OutputFileName, "output file name for captured data")
+	debugPtr := flag.Bool("D", DEBUG, "Debug mode")
 	versionPtr := flag.Bool("V", false, "Display version")
 
 	flag.Parse()
@@ -45,10 +87,11 @@ func main() {
 		os.Exit(0)
 	}
 
-	bbtkv3.DEBUG = *debugPtr
+	DEBUG = *debugPtr
 
 	// Initialisation
-	b, err := bbtkv3.NewBbtkv3(*portPtr, *speedPtr)
+	verbose := true
+	b, err := bbtkv3.NewBbtkv3(*portPtr, *speedPtr, verbose)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -103,7 +146,7 @@ func main() {
 	// Data Capture
 	time.Sleep(1 * time.Second)
 	data := b.CaptureEvents(*durationPtr)
-	bbtkv3.WriteText(*outputFilenamePtr, data)
+	WriteText(*outputFilenamePtr, data)
 	fmt.Println(data)
 
 	// Not necessary as defer will take care of it
