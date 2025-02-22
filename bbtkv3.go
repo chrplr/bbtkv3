@@ -6,7 +6,6 @@ package bbtkv3
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -25,10 +24,10 @@ var (
 
 // default parameters
 var (
-	portAddress    = "/dev/ttyUSB0"
-	baudrate       = 115200
-	duration       = 30
-	outputFileName = "bbtk-capture-001.dat"
+	PortAddress    = "/dev/ttyUSB0"
+	Baudrate       = 115200
+	Duration       = 30
+	OutputFileName = "bbtk-capture-001.dat"
 	DEBUG          = false
 )
 
@@ -37,7 +36,7 @@ type bbtkv3 struct {
 	reader *bufio.Reader
 }
 
-type thresholds struct {
+type Thresholds struct {
 	Mic1     uint8
 	Mic2     uint8
 	Sounder1 uint8
@@ -48,7 +47,7 @@ type thresholds struct {
 	Opto4    uint8
 }
 
-var defaultThresholds = thresholds{
+var defaultThresholds = Thresholds{
 	Mic1:     0,
 	Mic2:     0,
 	Sounder1: 63,
@@ -59,7 +58,7 @@ var defaultThresholds = thresholds{
 	Opto4:    110,
 }
 
-type smoothingMask struct {
+type SmoothingMask struct {
 	Mic1  bool
 	Mic2  bool
 	Opto4 bool
@@ -68,7 +67,7 @@ type smoothingMask struct {
 	Opto1 bool
 }
 
-var defaultSmoothingMask = smoothingMask{
+var defaultSmoothingMask = SmoothingMask{
 	Mic1:  true,
 	Mic2:  true,
 	Opto4: false,
@@ -208,7 +207,7 @@ func (b bbtkv3) IsAlive() (bool, error) {
 // When smoothing is 'off', the BBTK will detect *all* leading edges, e.g.
 // each refresh on a CRT.
 // When smoothing is 'on', you need to subtract 20ms from offset times.
-func (b bbtkv3) SetSmoothing(mask smoothingMask) error {
+func (b bbtkv3) SetSmoothing(mask SmoothingMask) error {
 	if err := b.SendCommand("SMOO"); err != nil {
 		return fmt.Errorf("SetSmoothing: %w", err)
 	}
@@ -340,7 +339,7 @@ func (b bbtkv3) DisplayInfoOnBBTK() {
 // Sounder volume (amplitude) and Opto luminance
 // activation threshold. Activation thresholds range
 // from 0-127.
-func (b bbtkv3) SetThresholds(x thresholds) {
+func (b bbtkv3) SetThresholds(x Thresholds) {
 	b.SendCommand("SEPV")
 	b.SendCommand(fmt.Sprintf("%d", x.Mic1))
 	b.SendCommand(fmt.Sprintf("%d", x.Mic2))
