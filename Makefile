@@ -1,40 +1,27 @@
-# ########################################################## #
-# Makefile for Golang Project
-# Includes cross-compiling, installation, cleanup
-# ########################################################## #
+# Simple Makefile for a Go project
 
-# Check for required command tools to build or stop immediately
-EXECUTABLES = git go find pwd
-K := $(foreach exec,$(EXECUTABLES),\
-        $(if $(shell which $(exec)),some string,$(error "No $(exec) in PATH)))
-
-ROOT_DIR:=$(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-
-BINARY=bbtk-capture
-VERSION=1.0.0
-BUILD=`git rev-parse HEAD`
-PLATFORMS=darwin linux windows
-ARCHITECTURES=amd64 arm64
-
-# Setup linker flags option for build that interoperate with variable names in src code
-LDFLAGS=-ldflags "-X main.Version=${VERSION} -X main.Build=${BUILD}"
-
-default: build
-
-all: clean build_all install
+# Build the application
+all: build test
 
 build:
-	go build ${LDFLAGS} -o ${BINARY}
+	@echo "Building..."
+	
+	
+	@go build ./... 
 
-build_all:
-	$(foreach GOOS, $(PLATFORMS),\
-	$(foreach GOARCH, $(ARCHITECTURES), $(shell export GOOS=$(GOOS); export GOARCH=$(GOARCH); go build -v -o $(BINARY)-$(GOOS)-$(GOARCH))))
+# Run the application
+run:
+	#@go run cmd/api/main.go
 
-install:
-	go install ${LDFLAGS}
+# Test the application
+test:
+	@echo "Testing..."
+	@go test ./... -v
 
-# Remove only what we've created
+# Clean the binary
 clean:
-	find ${ROOT_DIR} -name '${BINARY}[-?][a-zA-Z0-9]*[-?][a-zA-Z0-9]*' -delete
+	@echo "Cleaning..."
+	@rm -f main
 
-.PHONY: check clean install build_all all
+
+.PHONY: all build run test clean 

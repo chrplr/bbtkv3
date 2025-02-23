@@ -2,6 +2,27 @@
 // Author: Christophe Pallier <christophe@pallier.org>
 // LICENSE: GPL-3.0
 
+// Package main provides a command-line tool to capture events using the BlackBoxToolKit (bbtkv3).
+// It allows setting various parameters such as port address, baud rate, capture duration, and output file name.
+// The tool also supports a debug mode and displays version information if requested.
+//
+// The main functionality includes initializing the bbtkv3 device, setting parameters, clearing internal memory,
+// capturing events, and saving the captured data to files in both raw and CSV formats.
+//
+// Usage:
+//   -p string
+//         device (serial port name) (default "/dev/ttyUSB0")
+//   -b int
+//         baudrate (speed in bps) (default 115200)
+//   -d int
+//         duration of capture (in s) (default 30)
+//   -o string
+//         output file name for captured data (default "bbtk-capture.dat")
+//   -D
+//         Debug mode (default false)
+//   -V
+//         Display version
+
 package main
 
 import (
@@ -9,8 +30,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/chrplr/bbtkv3"
@@ -26,7 +45,7 @@ var (
 	PortAddress    = "/dev/ttyUSB0"
 	Baudrate       = 115200
 	Duration       = 30
-	OutputFileName = "bbtk-capture-001.dat"
+	OutputFileName = "bbtk-capture.dat"
 	DEBUG          = false
 )
 
@@ -37,38 +56,6 @@ var defaultSmoothingMask = bbtkv3.SmoothingMask{
 	Opto3: false,
 	Opto2: false,
 	Opto1: false,
-}
-
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
-	}
-	return true
-}
-
-func WriteText(basename string, text string) error {
-	var filename string = basename
-
-	ext := filepath.Ext(basename)
-	name := strings.TrimSuffix(basename, ext)
-
-	for i := 2; fileExists(filename); i++ {
-		filename = fmt.Sprintf("%s-%03d%s", name, i, ext)
-	}
-
-	f, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-
-	defer f.Close()
-
-	_, err = f.WriteString(text)
-
-	return err
 }
 
 func main() {
@@ -106,7 +93,7 @@ func main() {
 
 	// HandShaking
 	if err = b.Connect(); err != nil {
-		log.Fatalf("Connect returned: %w\n", err)
+		log.Fatalf("Connect returned: %v\n", err)
 	}
 	time.Sleep(time.Second)
 
@@ -130,7 +117,7 @@ func main() {
 	// Parameters setting
 	fmt.Printf("Setting Smoothing mask to %+v\n", defaultSmoothingMask)
 	if err = b.SetSmoothing(defaultSmoothingMask); err != nil {
-		log.Printf("%w", err)
+		log.Printf("%v", err)
 	}
 	time.Sleep(time.Second)
 
@@ -145,9 +132,39 @@ func main() {
 
 	// Data Capture
 	time.Sleep(1 * time.Second)
+	fmt.Printf("Capturing event (DSCM) for %v msec... ", *durationPtr)
 	data := b.CaptureEvents(*durationPtr)
-	WriteText(*outputFilenamePtr, data)
-	fmt.Println(data)
+	fmt.Println("ok!")
+
+	fname, err := WriteText(*outputFilenamePtr, data)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Printf("Raw Data saved to %s\n", fname)
+
+	dscEvents, err := bbtkv3.CaptureOutputToEvents(data)
+	if err != nil {
+		log.Fatalln(err)
+	} else {
+		efname := changeExtension(fname, "-dscevents.csv")
+		err = bbtkv3.SaveDSCEventsToCSV(dscEvents, efname)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+
+	// add a event with all lines set to 0 at the end of dscEvents
+	dscEvents = append(dscEvents, bbtkv3.DSCEvent{})
+
+	events, err := bbtkv3.CaptureEventsFromDSCEvents(dscEvents)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	err = bbtkv3.SaveEventsToCSV(events, changeExtension(fname, "events.csv"))
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	// Not necessary as defer will take care of it
 	//if err = b.Disconnect(); err != nil {
