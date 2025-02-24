@@ -98,6 +98,11 @@ To determine which serial port the BBTK is attached toi (`/dev/ttyACM0`, `/dev/t
 
     sudo dmesg -w 
 
+| :zap: MacOS X |
+|---------------|
+
+The BBTK may appear as `/dev/tty.usbserial-XXXX`. The page at <https://ftdichip.com/drivers/vcp-drivers/> contains drivers for various MacOS X versions.
+
 
 # Compiling from source
 
