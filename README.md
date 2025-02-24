@@ -4,7 +4,7 @@ Automated capture of events with a Black Box ToolKit(tm)
 The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
  generating sounds or TTL signals.
 
-This page describes `bbtk` a  program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the acquisition of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
+This page describes `bbtk` a  program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the capture of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
 
 This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://github.com/chrplr/bbtkv3), which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, possibly, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
@@ -12,7 +12,7 @@ This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://github.
 | :exclamation: This is a **Work In Progress**. |
 |-----------------------------------------------|
 
-The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by proposing improvements or reporting bugs either by contacting me (`<christophe@pallier.org>`) or by opening an issue on the [github repository](http://github.com/chrplr/bbtkv3).
+The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by proposing improvements or reporting bugs either by contacting me (`<christophe@pallier.org>`) or by opening an issue at <https://github.com/chrplr/bbtkv3/issues>.
 
 # Principle of operation
 
@@ -21,8 +21,8 @@ The program may not work as advertised, the documentation may not be up to date,
 To operate, three pieces of equipement are needed:
 
 1. A stimulation device (typically a computer, but not necessarily) 
-2. The bbtkv3 with input sensors (photodiodes, sound detectors, TTL detectors) attached to the stimulation device.
-3. A host computer driving the bbtkv2 (hooked to it via a USB cable).
+2. The BBTK with input sensors (photodiodes, sound detectors, TTL detectors) linked to the stimulation device.
+3. A host computer driving the BBTK (linked to it via a USB cable).
 
 | :point_up:  The stimulation PC and the host PC *can* be the same computer |
 |---------------------------------------------------------------------------| 
@@ -66,7 +66,7 @@ Usage of bbtk:
 
 Compiled versions for MACOSX, Windows and Linux, and intel (amd64) or arm are avavailable in <https://github.com/chrplr/bbtkv3/releases>.
 
-Get the version for your OS and architecture, and copy it in any folder listed in the `PATH` variable of your OS (e.g. `%windir%/system32` for Windows)
+Get the versions for your OS and architecture, rename it to your liking, e.g. `bbtk` and `bbtk-adjust-thresholds`, and copy them to any folder listed in the `PATH` variable of your OS (e.g. `%windir%/system32` for Windows)
 
 
 # Troubleshooting

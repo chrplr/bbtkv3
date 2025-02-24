@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"strconv"
 
 	"os"
 	//"path/filepath"
@@ -70,8 +71,8 @@ var defaultSmoothingMask = SmoothingMask{
 	Mic2:  true,
 	Opto4: false,
 	Opto3: false,
-	Opto2: false,
-	Opto1: false,
+	Opto2: true,
+	Opto1: true,
 }
 
 // init checks if the DEBUG environment variable is set.
@@ -295,16 +296,64 @@ func (b bbtkv3) GetFirmwareVersion() string {
 	return resp
 }
 
+func str2uint8(s string) uint8 {
+	num, err := strconv.ParseUint(s, 10, 8)
+	if err != nil {
+		log.Fatalf("Error: %w", err)
+	}
+	return uint8(num)
+}
+
 func (b bbtkv3) GetThresholds() Thresholds {
 	b.SendCommand("GEPV")
 	resp, err := b.ReadLine()
 	if err != nil {
 		fmt.Printf("In GetThresholds(): %v", err)
 	}
-	fmt.Println(resp)
-	// TODO should parse resp in a Thresholds struct
-	return defaultThresholds
+	if DEBUG {
+		fmt.Println(resp)
+	}
+	vals := strings.Split(resp, ",")
+	var x Thresholds
+	/* x := Thresholds{str2uint8(vals[0]),   TODO!!
+		str2uint8(vals[1]),
+		str2uint8(vals[2]),
+		str2uint8(vals[3]),
+		str2uint8(vals[4]),
+		str2uint8(vals[5]),
+		str2uint8(vals[6]),
+		str2uint8(vals[7])}
+	if DEBUG {
+		fmt.Println("+v", x)
+	}
+	*/
+	fmt.Printf("+v", vals)
+
+	return x
 }
+
+// Sets the sensor activation thresholds for the eight
+// adjustable lines, i.e. Mic activation threshold,
+// Sounder volume (amplitude) and Opto luminance
+// activation threshold. Activation thresholds range
+// from 0-127.
+func (b bbtkv3) SetThresholds(x Thresholds) {
+	b.SendCommand("SEPV")
+	b.SendCommand(fmt.Sprintf("%d", x.Mic1))
+	b.SendCommand(fmt.Sprintf("%d", x.Mic2))
+	b.SendCommand(fmt.Sprintf("%d", x.Sounder1))
+	b.SendCommand(fmt.Sprintf("%d", x.Sounder2))
+	b.SendCommand(fmt.Sprintf("%d", x.Opto1))
+	b.SendCommand(fmt.Sprintf("%d", x.Opto2))
+	b.SendCommand(fmt.Sprintf("%d", x.Opto3))
+	b.SendCommand(fmt.Sprintf("%d", x.Opto4))
+
+	time.Sleep(1 * time.Second)
+}
+
+//func (b bbtkv3) SetDefaultsThresholds() {
+//	b.SetThresholds(defaultThresholds)
+//}
 
 // AdjustThresholds launches the procedure to manually set up the thresholds on the BBTK
 func (b bbtkv3) AdjustThresholds() {
@@ -358,29 +407,6 @@ func (b bbtkv3) ClearTimingData() {
 func (b bbtkv3) DisplayInfoOnBBTK() {
 	b.SendCommand("ABOU")
 	time.Sleep(1. * time.Second)
-}
-
-// Sets the sensor activation thresholds for the eight
-// adjustable lines, i.e. Mic activation threshold,
-// Sounder volume (amplitude) and Opto luminance
-// activation threshold. Activation thresholds range
-// from 0-127.
-func (b bbtkv3) SetThresholds(x Thresholds) {
-	b.SendCommand("SEPV")
-	b.SendCommand(fmt.Sprintf("%d", x.Mic1))
-	b.SendCommand(fmt.Sprintf("%d", x.Mic2))
-	b.SendCommand(fmt.Sprintf("%d", x.Sounder1))
-	b.SendCommand(fmt.Sprintf("%d", x.Sounder2))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto1))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto2))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto3))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto4))
-
-	time.Sleep(1 * time.Second)
-}
-
-func (b bbtkv3) SetDefaultsThresholds() {
-	b.SetThresholds(defaultThresholds)
 }
 
 // Launches a digital data capture session.

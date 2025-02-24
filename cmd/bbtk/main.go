@@ -59,19 +59,8 @@ var defaultSmoothingMask = bbtkv3.SmoothingMask{
 	Mic2:  true,
 	Opto4: false,
 	Opto3: false,
-	Opto2: false,
-	Opto1: false,
-}
-
-var defaultThresholds = bbtkv3.Thresholds{
-	Mic1:     0,
-	Mic2:     0,
-	Sounder1: 63,
-	Sounder2: 63,
-	Opto1:    110,
-	Opto2:    110,
-	Opto3:    110,
-	Opto4:    110,
+	Opto2: true,
+	Opto1: true,
 }
 
 func main() {
@@ -137,8 +126,11 @@ func main() {
 	}
 	time.Sleep(time.Second)
 
-	fmt.Printf("Setting thresholds: %+v\n", defaultThresholds)
-	b.SetDefaultsThresholds()
+	//fmt.Printf("Setting thresholds: %+v\n", defaultThresholds)
+	//b.SetDefaultsThresholds()
+
+	fmt.Println("Getting thresholds...")
+	fmt.Printf("%+v\n", b.GetThresholds())
 
 	// Clearing internal memory
 	time.Sleep(time.Second)
