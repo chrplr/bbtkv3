@@ -1,19 +1,15 @@
 Events capture with a Black Box ToolKit 
 =======================================
 
+At <https://github.com/chrplr/bbtkv3/releases>, we provide an executable program, `bbtk`, that launches the acquisition of events on the Black Box ToolKit and export them in a `.csv` file.
 
-Here, we provide:
-
-- a *bbtkv3* Go module which encapsulates some of
-the commands documented in *The BBTKv2 API Guide* sold by the parent
-company.
-- an execuctable program, `bbtk`, that launches the acquisition of events on the bbtkv3 and saves them in a csv file.
-
+This program relies on a Go module that we provide at  <https://github.com/chrplr/bbtkv3/>, which encapsulates some of the commands documented in *The BBTKv2 API Guide*.
+-
 
 | :exclamation: This is a **Work In Progress**. |
 |-----------------------------------------------|
 
-The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by reorting issues, either by contacting me (`<christophe@pallier.org>`) or by opening an issue on the [github bbtkv3 repository](http://github.com/chrplr/bbtkv3).
+The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by reorting issues, either by contacting me (`<christophe@pallier.org>`) or by opening an issue on the [github repository](http://github.com/chrplr/bbtkv3).
 
 # Principle of operation
 
@@ -101,9 +97,9 @@ To determine which serial port the bbtk is attached to(`/dev/ttyACM0`, `/dev/tty
 
 # Compiling from source
 
-The source code is at <https://github.com/chrplr/bbtkv3>
+The source code is avalaible at <https://github.com/chrplr/bbtkv3>
 
-To compile it to an executable, you need the [Go development tools](https://go.dev/) (and [Git](https://git-scm.com/downloads) if you want to clone the github repository rather than downloading the sc as a zip file)
+To build the executable, you need the [Go development tools](https://go.dev/) (and [Git](https://git-scm.com/downloads) if you want to clone the github repository rather than downloading the src as a zip file)
 
 
 ```
@@ -112,7 +108,13 @@ cd bbtkv3
 go build ./... 
 ```
 
-This will generate the `bbtk` executable in the folder `cmd/bbtk`
+This should generate the `bbtk` executable in the folder `cmd/bbtk`
+
+For cross-compiling:
+
+```bash
+make -f Makefile-multiplatforms
+```
 
 
 ---
