@@ -109,9 +109,10 @@ This should generate the `bbtk` executable in the folder `cmd/bbtk`
 For cross-compiling:
 
 ```bash
-make -f Makefile-multiplatforms
+./build.sh
 ```
 
+The outcome is in `binaries/`
 
 ---
 
