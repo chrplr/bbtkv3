@@ -1,4 +1,5 @@
+- add posibility to start capture by pressing a key
+- add posibility to wait for a certain amount of time before starting capture
 - add tests, for the parsing of events and conversion to csv.
 - robustify the case when a sensor starts or ends  'up' (ie. at 1). This crashes detect_edges()
-- implement adjustable thresholds in cmd/bbtk, reading the thresholds form the command line or from a configuration file 	
 - create cmd/ibbtk, an interactive version with commands (check stuff/)
