@@ -1,25 +1,22 @@
-Automated capture of event with a Black Box ToolKit(tm) 
-=======================================================
+Automated capture of events with a Black Box ToolKit(tm) 
+========================================================
 
-The [Black Box ToolKit v3](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors, or TTL signals, and a signal generator,
- generating sounds or TTL signals. 
-
+The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
+ generating sounds or TTL signals.
 
 This page describes `bbtk`, a program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the acquisition of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
 
-
-This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://gihub.com/chrplr/bbtkv3), which encapsulates some of the commands documented in *The BBTKv2 API Guide*. You can use this go module to drive the bbtk in your own golang programs.
-
+This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://gihub.com/chrplr/bbtkv3), which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, possibly, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
 
 | :exclamation: This is a **Work In Progress**. |
 |-----------------------------------------------|
 
-The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by reorting issues, either by contacting me (`<christophe@pallier.org>`) or by opening an issue on the [github repository](http://github.com/chrplr/bbtkv3).
+The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by proposing improvements or reporting bugs either by contacting me (`<christophe@pallier.org>`) or by opening an issue on the [github repository](http://github.com/chrplr/bbtkv3).
 
 # Principle of operation
 
-![](bbtkv3.jpg)
+![](images/bbtkv3.jpg)
 
 To operate, three pieces of equipement are needed:
 
@@ -70,7 +67,7 @@ Get the version for your OS and architecture, and copy it in any folder listed i
 # Troubleshooting
 
 > [!WARNING]
-> The BBTKv3 and the host PC communicate via a serial protocol over
+> The BBTK and the host PC communicate via a serial protocol over
 USB. Depending on your computer, you may need to install an additional drivers to handle this. 
 
    
@@ -88,7 +85,7 @@ For the bbtk to be detected as a serial device, the module `ftdi_sio` must be lo
 
     sudo modprobe ftdi_sio
 
-To determine which serial port the bbtk is attached to(`/dev/ttyACM0`, `/dev/ttyUSB0`, ...), run: 
+To determine which serial port the BBTK is attached to(`/dev/ttyACM0`, `/dev/ttyUSB0`, ...), run: 
 
     sudo dmesg -w 
 
@@ -96,7 +93,7 @@ To determine which serial port the bbtk is attached to(`/dev/ttyACM0`, `/dev/tty
 
 # Compiling from source
 
-The source code is avalaible at <https://github.com/chrplr/bbtkv3>
+The source code is available at <https://github.com/chrplr/bbtkv3>
 
 To build the executable, you need the [Go development tools](https://go.dev/) (and [Git](https://git-scm.com/downloads) if you want to clone the github repository rather than downloading the src as a zip file)
 

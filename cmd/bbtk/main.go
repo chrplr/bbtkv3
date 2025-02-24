@@ -23,6 +23,11 @@
 //   -V
 //         Display version
 
+// TODO: implement adjustable thresholds, reading the thresholds form the command line or from a configuration file
+// TODO: better handle errors
+// TODO: The way I handle DEBUG is a disaster, implement verbose and debug with 2 level logs.
+//        THe module bbtkv3 uses the env at
+
 package main
 
 import (
@@ -56,6 +61,17 @@ var defaultSmoothingMask = bbtkv3.SmoothingMask{
 	Opto3: false,
 	Opto2: false,
 	Opto1: false,
+}
+
+var defaultThresholds = bbtkv3.Thresholds{
+	Mic1:     0,
+	Mic2:     0,
+	Sounder1: 63,
+	Sounder2: 63,
+	Opto1:    110,
+	Opto2:    110,
+	Opto3:    110,
+	Opto4:    110,
 }
 
 func main() {
@@ -121,7 +137,7 @@ func main() {
 	}
 	time.Sleep(time.Second)
 
-	//fmt.Printf("Setting thresholds: %+v\n", defaultThresholds)
+	fmt.Printf("Setting thresholds: %+v\n", defaultThresholds)
 	b.SetDefaultsThresholds()
 
 	// Clearing internal memory
@@ -132,7 +148,7 @@ func main() {
 
 	// Data Capture
 	time.Sleep(1 * time.Second)
-	fmt.Printf("Capturing event (DSCM) for %v msec... ", *durationPtr)
+	fmt.Printf("Capturing events (with DSCM) for %v msec... ", *durationPtr)
 	data := b.CaptureEvents(*durationPtr)
 	fmt.Println("ok!")
 
@@ -146,7 +162,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	} else {
-		efname := changeExtension(fname, "-dscevents.csv")
+		efname := changeExtension(fname, "dscevents.csv")
 		err = bbtkv3.SaveDSCEventsToCSV(dscEvents, efname)
 		if err != nil {
 			log.Fatalln(err)

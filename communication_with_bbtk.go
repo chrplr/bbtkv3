@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"log"
 
-	//"os"
+	"os"
 	//"path/filepath"
 	"strings"
 	"time"
@@ -74,8 +74,21 @@ var defaultSmoothingMask = SmoothingMask{
 	Opto1: false,
 }
 
-func NewBbtkv3(portAddress string, baudrate int, verbose bool) (*bbtkv3, error) {
+// init checks if the DEBUG environment variable is set.
+func init() {
+	if _, ok := os.LookupEnv("DEBUG"); ok {
+		DEBUG = true
+		log.Println("DEBUG mode enabled.")
+	} else {
+		DEBUG = false
+	}
+}
+
+// NewBbtkv3 creates a new bbtkv3 object, connecting to the serial device at portAddress.
+func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, error) {
 	var box bbtkv3
+
+	verbose = verbose_flag
 
 	mode := &serial.Mode{
 		BaudRate: baudrate,
@@ -85,12 +98,12 @@ func NewBbtkv3(portAddress string, baudrate int, verbose bool) (*bbtkv3, error) 
 	}
 
 	if verbose {
-		fmt.Printf("Trying to connect to %v at %dbps...", portAddress, baudrate)
+		fmt.Printf("Trying to open %v at %d bps...\n", portAddress, baudrate)
 	}
 
 	port, err := serial.Open(portAddress, mode)
 	if err != nil {
-		return nil, fmt.Errorf("Error while trying to open bbtkv3 at %s (at %d bps): %w (Under Linux, try `sudo modprobe ftdi_sio`)\n", portAddress, baudrate, err)
+		return nil, fmt.Errorf("Error while trying to open %s (at %d bps): %w (Under Linux, try `sudo modprobe ftdi_sio`)\n", portAddress, baudrate, err)
 	}
 
 	if verbose {
@@ -111,7 +124,7 @@ func NewBbtkv3(portAddress string, baudrate int, verbose bool) (*bbtkv3, error) 
 func (b bbtkv3) Connect() error {
 
 	if verbose {
-		fmt.Printf("Trying to connect to bbtkv3...")
+		fmt.Println("Trying to connect to bbtkv3...")
 	}
 
 	b.SendCommand("CONN")
@@ -132,12 +145,13 @@ func (b bbtkv3) Connect() error {
 	return nil
 }
 
+// Disconnect closes the connection to the bbtkv3.
 func (b bbtkv3) Disconnect() error {
 	//b.SendBreak()
 	return b.port.Close()
 }
 
-// SendBreak send a serial break to the bbtk. Useful if the box is stucked.
+// SendBreak send a serial break to the bbtk. Useful on the bbtkv2 when the box is stucked, but HARMFUL on the bbtkv3 !!! So disabled.
 func (b bbtkv3) SendBreak() {
 	//if DEBUG {
 	//	log.Println("Sending serial break.")
@@ -146,6 +160,7 @@ func (b bbtkv3) SendBreak() {
 	time.Sleep(time.Second)
 }
 
+// ResetSerialBuffers purges the input and output buffers of the serial port.
 func (b bbtkv3) ResetSerialBuffers() error {
 	if err := b.port.ResetInputBuffer(); err != nil {
 		return err
@@ -275,9 +290,20 @@ func (b bbtkv3) GetFirmwareVersion() string {
 	b.SendCommand("FIRM")
 	resp, err := b.ReadLine()
 	if err != nil {
-		fmt.Printf("GetFirmWareVersion: %v", err)
+		fmt.Printf("In GetFirmWareVersion(): %v", err)
 	}
 	return resp
+}
+
+func (b bbtkv3) GetThresholds() Thresholds {
+	b.SendCommand("GEPV")
+	resp, err := b.ReadLine()
+	if err != nil {
+		fmt.Printf("In GetThresholds(): %v", err)
+	}
+	fmt.Println(resp)
+	// TODO should parse resp in a Thresholds struct
+	return defaultThresholds
 }
 
 // AdjustThresholds launches the procedure to manually set up the thresholds on the BBTK
