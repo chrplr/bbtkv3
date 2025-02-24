@@ -1,6 +1,13 @@
 Events capture with a Black Box ToolKit 
 =======================================
 
+The [Black Box ToolKit v3](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to
+ measure the timing of audio-visual stimuli with sub-millisecond
+ accuracy. It replaces a digital oscilloscope (capturing activity on
+ sound and visual sensors, or TTL signals) and a signal generator
+ (generating sound or TTL signal). 
+
+
 At <https://github.com/chrplr/bbtkv3/releases>, we provide an executable program, `bbtk`, that launches the acquisition of events on the Black Box ToolKit and export them in a `.csv` file.
 
 This program relies on a Go module that we provide at  <https://github.com/chrplr/bbtkv3/>, which encapsulates some of the commands documented in *The BBTKv2 API Guide*.
@@ -15,13 +22,6 @@ The program may not work as advertised, the documentation may not be up to date,
 
 ![](bbtkv3.jpg)
 
-The **Black Box ToolKit v3** is a device that allows psychologists to
- measure the timing of audio-visual stimuli with sub-millisecond
- accuracy. It replaces a digital oscilloscope (capturing activity on
- sound and visual sensors, or TTL signals) and a signal generator
- (generating sound or TTL signal). (See
-<https://www.blackboxtoolkit.com/bbtkv3.html for more information>)
-
 To operate, three pieces of equipement are needed:
 
 1. A stimulation device (typically a computer, but not necessarily) 
@@ -32,13 +32,6 @@ To operate, three pieces of equipement are needed:
 |---------------------------------------------------------------------------| 
 
 As data are recorded asynchronously by the BBTKvr3, it is possible for a single PC to switch the BBTKv2 into “capture mode”, launch the stimulation program and, when done, download the timing data from the BBTKv3 memory.
-
-# Installation
-
-Compiled versions for MACOSX, Windows and Linux, and intel (amd64) or arm are avavailable in <https://github.com/chrplr/bbtkv3/releases>.
-
-Get the version for your OS and architecture, and copy it in any folder listed in the PATH variable of your OS (e.g. `%windir%/system32` for Windows)
-
 
 
 # Usage
@@ -68,6 +61,12 @@ Usage of cmd/bbtk/bbtk:
   -p string
     	device (serial port name) (default "/dev/ttyUSB0")
 ```
+# Installation
+
+Compiled versions for MACOSX, Windows and Linux, and intel (amd64) or arm are avavailable in <https://github.com/chrplr/bbtkv3/releases>.
+
+Get the version for your OS and architecture, and copy it in any folder listed in the `PATH` variable of your OS (e.g. `%windir%/system32` for Windows)
+
 
 # Troubleshooting
 
