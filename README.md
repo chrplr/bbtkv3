@@ -74,9 +74,10 @@ Get the version for your OS and architecture, and copy it in any folder listed i
 USB. Depending on your computer, you may need to install an additional drivers to handle this. 
 
    
-| :zap: Windows |
-|---------------|
-	Under Windows, you may need to install a driver to communicate with the BBTK. You can install the mbed-cli available from <https://os.mbed.com/docs/mbed-os/v6.16/quick-start/build-with-mbed-cli.html> and check install driver during the setup.
+| :zap: Windows BBTKv2 only (?)|
+|------------------------------|
+
+Under Windows, if you use the bbtkv2 rather than v3, you may need to install a driver to communicate with the BBTK. You can install the mbed-cli available from <https://os.mbed.com/docs/mbed-os/v6.16/quick-start/build-with-mbed-cli.html> and check install driver during the setup.
 
 | :zap: Linux  |
 |--------------|
