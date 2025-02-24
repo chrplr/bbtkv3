@@ -6,7 +6,7 @@ The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a devic
 
 This page describes `bbtk` a  program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the acquisition of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
 
-This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://gihub.com/chrplr/bbtkv3), which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, possibly, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
+This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://github.com/chrplr/bbtkv3), which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, possibly, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
 
 | :exclamation: This is a **Work In Progress**. |
