@@ -1,0 +1,170 @@
+package main
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+type CaptorSet uint32
+
+const (
+	Keypad4 CaptorSet = 1 << iota
+	Keypad3           // 2
+	Keypad2           // 4
+	Keypad1           // 8
+	Opto4
+	Opto3
+	Opto2
+	Opto1
+	TTLin2
+	TTLin1
+	Mic2
+	Mic1
+	ActClose4
+	ActClose3
+	ActClose2
+	ActClose1
+	TTLout2
+	TTLout1
+	Sounder2
+	Sounder1
+	maxKey
+)
+
+func (k CaptorSet) String() string {
+	if k >= maxKey {
+		return fmt.Sprintf("<unknown key: %d>", k)
+	}
+
+	switch k {
+	case Keypad1:
+		return "Keypad1"
+	case Keypad2:
+		return "Keypad2"
+	case Keypad3:
+		return "Keypad3"
+	case Keypad4:
+		return "Keypad4"
+	case Sounder1:
+		return "Sounder1"
+	case Sounder2:
+		return "Sounder1"
+	case Opto1:
+		return "Opto1"
+	case Opto2:
+		return "Opto2"
+	case Opto3:
+		return "Opto3"
+	case Opto4:
+		return "Opto4"
+	case Mic1:
+		return "Mic1"
+	case Mic2:
+		return "Mic2"
+	case TTLin1:
+		return "TTLin1"
+	case TTLin2:
+		return "TTLin2"
+	case TTLout1:
+		return "TTLout1"
+	case TTLout2:
+		return "TTLout2"
+	case ActClose1:
+		return "ActClose1"
+	case ActClose2:
+		return "ActClose2"
+	case ActClose3:
+		return "ActClose3"
+	case ActClose4:
+		return "ActClose4"
+	}
+
+	// multiple keys
+	var names []string
+	for key := Keypad4; key < maxKey; key <<= 1 {
+		if k&key != 0 {
+			names = append(names, key.String())
+		}
+	}
+	return strings.Join(names, "|")
+}
+
+type event struct {
+	timestamp int64
+	cs        CaptorSet
+}
+
+var (
+	NAMES = []string{"timestamp", "Keypad4", "Keypad3", "Keypad2", "Keypad1", "Opto4",
+		"Opto3", "Opto2", "Opto1", "TTLin2", "TTLin1", "Mic2",
+		"Mic1", "ActClose4", "ActClose3", "ActClose2", "ActClose1",
+		"TTLout2", "TTLout1", "Sounder2", "Sounder1"}
+)
+
+func bbtkresponse2event(st string) (event, error) {
+	var v event = event{
+		timestamp: 0,
+		cs:        0,
+	}
+
+	if len(st) != 32 {
+		return v, fmt.Errorf("bbtkresponse expected a string of length 32")
+	}
+
+	// convert binary value to int
+	for i, bit := range st[:20] {
+		if bit != '0' {
+			v.cs = v.cs + 1<<i
+		}
+	}
+
+	// read time stamp (in microsec)
+	ts, err := strconv.Atoi(st[20:])
+	if err != nil {
+		return v, err
+	}
+	v.timestamp = int64(ts)
+
+	return v, nil
+}
+
+// LocateEdges finds the positions of leading and falling edges in a binary sequence
+// return: two lists of integers corresponding to the indices of raising and falling edges
+func LocateEdges(binarySequence []uint32) ([]uint32, []uint32) {
+	if len(binarySequence) <= 2 {
+		return nil, nil
+	}
+
+	l := uint32(len(binarySequence))
+	leadingEdges := make([]uint32, 0)
+	fallingEdges := make([]uint32, 0)
+
+	if binarySequence[0] == 1 { //pretend the signal was clamped at 0 before first measurement
+		leadingEdges = append(leadingEdges, 0)
+	}
+	var i uint32
+	for i = 0; i < l-1; i++ {
+		if binarySequence[i] == 0 && binarySequence[i+1] == 1 {
+			leadingEdges = append(leadingEdges, i+1)
+		} else {
+			if binarySequence[i] == 1 && binarySequence[i+1] == 0 {
+				fallingEdges = append(fallingEdges, i+1)
+			}
+		}
+	}
+
+	if binarySequence[l-1] == 1 { //pretend the signal was clamped at 0 after last measurement
+		fallingEdges = append(fallingEdges, l)
+	}
+	return leadingEdges, fallingEdges
+}
+
+func main() {
+	line := "11001100110001010101000000123456"
+	v, err := bbtkresponse2event(line)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(v.cs, v.timestamp)
+}
