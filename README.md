@@ -1,17 +1,15 @@
 Events capture with a Black Box ToolKit 
 =======================================
 
-The [Black Box ToolKit v3](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to
- measure the timing of audio-visual stimuli with sub-millisecond
- accuracy. It replaces a digital oscilloscope (capturing activity on
- sound and visual sensors, or TTL signals) and a signal generator
- (generating sound or TTL signal). 
+The [Black Box ToolKit v3](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscopei, capturing activity on sound and visual sensors, or TTL signals, and a signal generator,
+ generating sounds or TTL signals. 
 
 
-At <https://github.com/chrplr/bbtkv3/releases>, we provide an executable program, `bbtk`, that launches the acquisition of events on the Black Box ToolKit and export them in a `.csv` file.
+This page describes `bbtk`, a program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the acquisition of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
 
-This program relies on a Go module that we provide at  <https://github.com/chrplr/bbtkv3/>, which encapsulates some of the commands documented in *The BBTKv2 API Guide*.
--
+
+This program relies on a Go module importable at `github.com/chrplr/bbtkv3`, wich encapsulates some of the commands documented in *The BBTKv2 API Guide*.
+
 
 | :exclamation: This is a **Work In Progress**. |
 |-----------------------------------------------|
@@ -34,7 +32,7 @@ To operate, three pieces of equipement are needed:
 As data are recorded asynchronously by the BBTKvr3, it is possible for a single PC to switch the BBTKv2 into “capture mode”, launch the stimulation program and, when done, download the timing data from the BBTKv3 memory.
 
 
-# Usage
+# Running bbtk
 
 Open a terminal (e.g. start `cmd` under Windows), and type:
 
