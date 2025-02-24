@@ -4,7 +4,7 @@ Automated capture of events with a Black Box ToolKit(tm)
 The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
  generating sounds or TTL signals.
 
-This page describes `bbtk`, a program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the acquisition of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
+This page describes `bbtk` a  program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the acquisition of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
 
 This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://gihub.com/chrplr/bbtkv3), which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, possibly, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
@@ -45,7 +45,7 @@ This should launch a 30s acquisition.
 
 
 ```
-Usage of cmd/bbtk/bbtk:
+Usage of bbtk:
   -D	Debug mode
   -V	Display version
   -b int
@@ -57,6 +57,11 @@ Usage of cmd/bbtk/bbtk:
   -p string
     	device (serial port name) (default "/dev/ttyUSB0")
 ```
+
+> [!NOTE]
+>  Another program, `bbtk-adjust-thresholds` allows you the set the sensors' thresholds before doing the capture.
+
+
 # Installation
 
 Compiled versions for MACOSX, Windows and Linux, and intel (amd64) or arm are avavailable in <https://github.com/chrplr/bbtkv3/releases>.
@@ -71,24 +76,27 @@ Get the version for your OS and architecture, and copy it in any folder listed i
 USB. Depending on your computer, you may need to install an additional drivers to handle this. 
 
    
-| :zap: Windows BBTKv2 only (?)|
-|------------------------------|
+| :zap: Windows |
+|---------------|
 
-Under Windows, if you use the bbtkv2 rather than v3, you may need to install a driver to communicate with the BBTK. You can install the mbed-cli available from <https://os.mbed.com/docs/mbed-os/v6.16/quick-start/build-with-mbed-cli.html> and check install driver during the setup.
+To determine the (virtual) serial port to which the BBTK is attached, check the "Ports (COM & LPT)" section of the Computer Management console.
+
+For the BBTK v2, you may need to install a driver to communicate with the BBTK. You can install the mbed-cli available from <https://os.mbed.com/docs/mbed-os/v6.16/quick-start/build-with-mbed-cli.html> and check install driver during the setup.
+
+For the BBTK v3, you may need to install the <https://ftdichip.com/drivers/vcp-drivers/> following instructions at <https://ftdichip.com/document/installation-guides/>
+
 
 | :zap: Linux  |
 |--------------|
 
 
-For the bbtk to be detected as a serial device, the module `ftdi_sio` must be loaded in the kernel. You may need to do it manually:
-
+For the BBTK to be recognized as a serial device, the module `ftdi_sio` must be loaded in the linux kernel. To do so manually:
 
     sudo modprobe ftdi_sio
 
-To determine which serial port the BBTK is attached to(`/dev/ttyACM0`, `/dev/ttyUSB0`, ...), run: 
+To determine which serial port the BBTK is attached toi (`/dev/ttyACM0`, `/dev/ttyUSB0`, ...), run: 
 
     sudo dmesg -w 
-
 
 
 # Compiling from source
