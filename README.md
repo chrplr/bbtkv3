@@ -1,11 +1,44 @@
 Events capture with a Black Box ToolKit 
 =======================================
 
-This program drives a [Black Box Toolkit BBTKv3](https://www.blackboxtoolkit.com/bbtkv3.html) to capture events.
+> [!WARNING] > This is a **Work In Progress**. The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by reorting issues, either by contacting me (`<christophe@pallier.org>`) or by opening an issue on the [github bbtkv3 repository](http://github.com/chrplr/bbtkv3).
 
-When launched, it will connect to the black box toolkit and, if successfull, will capture events for 30s (using the ToolBox' DSCM internal command) and save them in csv files.
 
-NOTE: This is a *Work In Progress*.
+<p align="center" width="100%">
+![](bbtkv3.jpg)
+</p>
+
+The **Black Box ToolKit v3** is a device that allows psychologists to
+ measure the timing of audio-visual stimuli with sub-millisecond
+ accuracy. It replaces a digital oscilloscope (capturing activity on
+ sound and visual sensors, or TTL signals) and a signal generator
+ (generating sound or TTL signal). (See
+<https://www.blackboxtoolkit.com/bbtkv3.html for more information>)
+
+To operate, three pieces of equipement are needed:
+
+1. A stimulation device (typically a computer, but not necessarily) 
+2. The bbtkv3 with input sensors (photodiodes, sound detectors, TTL detectors) attached to the stimulation device.
+3. A host computer driving the bbtkv2 (hooked to it via a USB cable).
+
+> [!TIP] > The stimulation PC and the host PC *can* be the same computer (but do not have to). As data are recorded asynchronously by the BBTKv2, it is possible for a single PC to switch the BBTKv2 into “capture mode”, launch the stimulation program and, when done, download the timing data from the BBTKv2 memory.
+   
+> [!IMPORTANT] >  Under Windows, you may need to install a driver to communicate with the BBTK. You can install the mbed-cli available from <https://os.mbed.com/docs/mbed-os/v6.16/quick-start/build-with-mbed-cli.html> and check install driver during the setup.
+
+> [!IMPORTANT] > Linux: the kernel module `ftdi_sio` needs to be loaded (e.g. `sudo modeprobe ftdi_sio`)
+
+
+The BBTKv3 and the host PC communicate via a serial protocol over
+USB. 
+
+Here, we provide:
+
+- a *bbtkv3* Go module which encapsulates some of
+the commands documented in *The BBTKv2 API Guide* sold by the parent
+company.
+- an execuctable program, `bbtk`, that will drive the acquisition of events on the bbtkv3 and saves them in a csv file.
+
+
 
 # Installation
 
