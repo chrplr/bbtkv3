@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"time"
 
@@ -73,6 +74,10 @@ func ScanSerialPortsForBBTK() {
 		DataBits: 8,
 		StopBits: serial.OneStopBit,
 	}
+
+	rand.Shuffle(len(ports), func(i, j int) {
+		ports[i], ports[j] = ports[j], ports[i]
+	})
 
 	for _, port := range ports {
 		fmt.Printf("Checking %s ... ", port)
