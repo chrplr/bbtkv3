@@ -130,7 +130,7 @@ func (b bbtkv3) Connect() error {
 
 	b.SendCommand("CONN")
 
-	time.Sleep(10. * time.Millisecond)
+	time.Sleep(100. * time.Millisecond)
 
 	resp, err := b.ReadLine()
 	if err != nil {
@@ -211,7 +211,7 @@ func (b bbtkv3) IsAlive() (bool, error) {
 		}
 
 		if resp != "ECHO" {
-			return true, fmt.Errorf("IsAlive: Expected \"ECHO\", Got \"%v\"", resp)
+			return false, fmt.Errorf("IsAlive: Expected \"ECHO\", Got \"%v\"", resp)
 		} else {
 			return true, nil
 		}
