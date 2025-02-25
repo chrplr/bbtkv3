@@ -40,6 +40,8 @@ func ReadData(port serial.Port) string {
 		//0 means we hit the timeout.
 		if n == 0 {
 			return byteBuff.String()
+		} else {
+			fmt.Println(n)
 		}
 
 		byteBuff.Write(buff[:n])
@@ -83,6 +85,7 @@ func ScanSerialPortsForBBTK() {
 		} else {
 			fmt.Println("no")
 		}
+		p.Close()
 	}
 }
 
