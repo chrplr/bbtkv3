@@ -19,9 +19,14 @@ var (
 )
 
 func ReadData(port serial.Port) string {
-	var started bool
 	byteBuff := bytes.NewBufferString("")
 	buff := make([]byte, 100)
+
+	err := port.SetReadTimeout(time.Second)
+	if err != nil {
+		panic(err)
+	}
+
 	for {
 
 		n, err := port.Read(buff)
@@ -29,20 +34,9 @@ func ReadData(port serial.Port) string {
 			panic(err)
 		}
 
-		//if this is the first read, start the timeout
-		if !started {
-			started = true
-			err := port.SetReadTimeout(time.Second * 1)
-			if err != nil {
-				panic(err)
-			}
-		}
-
 		//0 means we hit the timeout.
 		if n == 0 {
 			return byteBuff.String()
-		} else {
-			fmt.Println(n)
 		}
 
 		byteBuff.Write(buff[:n])
