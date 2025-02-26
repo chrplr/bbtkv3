@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"time"
 
@@ -46,22 +45,16 @@ func ReadData(port serial.Port) string {
 	}
 }
 
-func CheckBBTKConnectedAt(port serial.Port) bool {
+func CheckIfBBTKConnectedAt(port serial.Port) bool {
 	_, err := port.Write([]byte("CONN\r\n"))
 	if err != nil {
 		fmt.Println(err)
 	}
-
 	resp := ReadData(port)
 	return resp[:len(resp)-1] == "BBTK;"
 }
 
-func ScanSerialPortsForBBTK() {
-	ports, err := serial.GetPortsList()
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func ScanSerialPortForBBTK(portName string) {
 	mode := &serial.Mode{
 		BaudRate: Baudrate,
 		Parity:   serial.NoParity,
@@ -69,22 +62,16 @@ func ScanSerialPortsForBBTK() {
 		StopBits: serial.OneStopBit,
 	}
 
-	rand.Shuffle(len(ports), func(i, j int) {
-		ports[i], ports[j] = ports[j], ports[i]
-	})
-
-	for _, port := range ports {
-		fmt.Printf("Checking %s ... ", port)
-		p, err := serial.Open(port, mode)
-		if err != nil {
-			fmt.Println("Error while trying to open", port, " at ", Baudrate, "bps", err)
-		}
-		if CheckBBTKConnectedAt(p) {
-			fmt.Println("BBTK found!")
-		} else {
-			fmt.Println("no")
-		}
-		p.Close()
+	p, err := serial.Open(portName, mode)
+	if err != nil {
+		fmt.Println("Error while trying to open", portName, " at ", Baudrate, "bps", err)
+	}
+	defer p.Close()
+	if DEBUG {
+		fmt.Println("Opened port", portName)
+	}
+	if CheckIfBBTKConnectedAt(p) {
+		fmt.Printf("BBTK found at %v\n", portName)
 	}
 }
 
@@ -100,10 +87,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if len(portlist) == 0 {
 		fmt.Println("No serial ports found!")
 	} else {
 		fmt.Printf("Scanning %v for a BBTK...\n", portlist)
-		ScanSerialPortsForBBTK()
+		for _, p := range portlist {
+			go ScanSerialPortForBBTK(p)
+		}
 	}
+	time.Sleep(2. * time.Second)
 }
