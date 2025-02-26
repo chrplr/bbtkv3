@@ -137,7 +137,7 @@ func main() {
 
 	// Data Capture
 	time.Sleep(1 * time.Second)
-	fmt.Printf("Capturing events (with DSCM) for %v msec... ", *durationPtr)
+	fmt.Printf("Capturing events (with DSCM) for %v seconds... ", *durationPtr)
 	data := b.CaptureEvents(*durationPtr)
 	fmt.Println("ok!")
 
