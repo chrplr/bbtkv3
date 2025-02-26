@@ -1,5 +1,5 @@
 // scan all available serial ports for a BBTK device
-
+// because some ports can be blocking,
 package main
 
 import (
@@ -56,11 +56,11 @@ func CheckBBTKConnectedAt(port serial.Port) bool {
 	return resp[:len(resp)-1] == "BBTK;"
 }
 
-func ScanSerialPortsForBBTK() {
-	ports, err := serial.GetPortsList()
-	if err != nil {
-		log.Fatal(err)
-	}
+func ScanSerialPortsForBBTK(ports []string) {
+	//ports, err := serial.GetPortsList()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 
 	mode := &serial.Mode{
 		BaudRate: Baudrate,
@@ -89,6 +89,8 @@ func ScanSerialPortsForBBTK() {
 }
 
 func main() {
+	var err error
+
 	if _, ok := os.LookupEnv("DEBUG"); ok {
 		DEBUG = true
 		log.Println("DEBUG mode enabled.")
@@ -96,14 +98,19 @@ func main() {
 		DEBUG = false
 	}
 
-	portlist, err := serial.GetPortsList()
-	if err != nil {
-		log.Fatal(err)
+	portlist := os.Args[1:]
+
+	if len(portlist) == 0 {
+		portlist, err = serial.GetPortsList()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
+
 	if len(portlist) == 0 {
 		fmt.Println("No serial ports found!")
 	} else {
 		fmt.Printf("Scanning %v for a BBTK...\n", portlist)
-		ScanSerialPortsForBBTK()
+		ScanSerialPortsForBBTK(portlist)
 	}
 }

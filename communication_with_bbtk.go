@@ -104,7 +104,7 @@ func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, er
 
 	port, err := serial.Open(portAddress, mode)
 	if err != nil {
-		return nil, fmt.Errorf("Error while trying to open %s (at %d bps): %w (Under Linux, try `sudo modprobe ftdi_sio`)\n", portAddress, baudrate, err)
+		return nil, fmt.Errorf("error while trying to open %s (at %d bps): %w (Under Linux, try `sudo modprobe ftdi_sio`)", portAddress, baudrate, err)
 	}
 
 	if verbose {
@@ -189,11 +189,11 @@ func (b bbtkv3) ReadLine() (string, error) {
 	var s string
 	var err error
 	if s, err = b.reader.ReadString('\n'); err != nil {
-		return "", fmt.Errorf("Readline: %w", err)
+		return "", fmt.Errorf("in Readline(): %w", err)
 	}
 
 	if DEBUG {
-		log.Printf("Readline: got \"%s\"\n", s[:len(s)-1])
+		log.Printf("In Readline(), got \"%s\"\n", s[:len(s)-1])
 	}
 	return s[:len(s)-1], err
 }
@@ -299,7 +299,7 @@ func (b bbtkv3) GetFirmwareVersion() string {
 func str2uint8(s string) uint8 {
 	num, err := strconv.ParseUint(s, 10, 8)
 	if err != nil {
-		log.Fatalf("Error: %w", err)
+		log.Fatalf("Error: %v", err)
 	}
 	return uint8(num)
 }
@@ -327,7 +327,7 @@ func (b bbtkv3) GetThresholds() Thresholds {
 		fmt.Println("+v", x)
 	}
 	*/
-	fmt.Printf("+v", vals)
+	fmt.Printf("%v", vals)
 
 	return x
 }
