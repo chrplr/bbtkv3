@@ -30,6 +30,25 @@ var DSCLineNames = append([]string{"timestamp"}, append(InputPortNames, OutputPo
 // PortState represents the state of input or output ports
 type PortState map[string]int
 
+// DSCEvent represents a single event (transition) with timestamp and port states
+type DSCEvent struct {
+	Timestamp  float64
+	PortStates map[string]int
+}
+
+// Edge represents a binary signal edge with its position
+type Edge struct {
+	Position int
+	Time     float64
+}
+
+// Event represents a complete event with type, onset time, and duration
+type Event struct {
+	Type     string
+	Onset    float64
+	Duration float64
+}
+
 // OutputPortMask8ToSeries converts an 8-bit string to a map of port states
 func OutputPortMask8ToSeries(mask8 string) (PortState, error) {
 	if len(mask8) != 8 {
@@ -45,12 +64,6 @@ func OutputPortMask8ToSeries(mask8 string) (PortState, error) {
 		result[name] = bit
 	}
 	return result, nil
-}
-
-// DSCEvent represents a single event with timestamp and port states
-type DSCEvent struct {
-	Timestamp  float64
-	PortStates map[string]int
 }
 
 func Txt2DSCEvent(txt string) (*DSCEvent, error) {
@@ -149,19 +162,6 @@ func SaveDSCEventsToCSV(events []DSCEvent, filename string) error {
 	}
 
 	return nil
-}
-
-// Edge represents a binary signal edge with its position
-type Edge struct {
-	Position int
-	Time     float64
-}
-
-// Event represents a complete event with type, onset time, and duration
-type Event struct {
-	Type     string
-	Onset    float64
-	Duration float64
 }
 
 // LocateEdges finds the positions of leading and falling edges in a binary sequence

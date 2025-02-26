@@ -7,15 +7,23 @@
 if [ "$#" -ne 1 ]
 then
 	echo "Usage: $0 VERSION (where VERSION is X.Y.Z)"
-  	exit 1
+	exit 1
 fi
 
 VERSION=$1
 BUILD=$(git rev-parse HEAD)
-PLATFORMS="darwin linux windows"
-ARCHITECTURES="amd64 arm64"
 COMMANDS=$(\ls cmd)
 BUILD_FOLDER=./binaries
+
+
+if [[ -z "${PLATFORMS}" ]]; then
+	PLATFORMS="darwin linux windows"
+fi
+
+if [[ -z "${ARCHITECTURES}" ]]; then
+	ARCHITECTURES="amd64 arm64"
+fi
+
 
 echo Building ${COMMANDS} 
 echo for PLATFORMS=${PLATFORMS} 

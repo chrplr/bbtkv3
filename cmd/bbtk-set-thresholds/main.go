@@ -47,11 +47,8 @@ var (
 )
 
 var (
-	PortAddress    = "/dev/ttyUSB0"
-	Baudrate       = 115200
-	Duration       = 30
-	OutputFileName = "bbtk-capture.dat"
-	DEBUG          = false
+	PortAddress = "/dev/ttyUSB0"
+	Baudrate    = 115200
 )
 
 var defaultSmoothingMask = bbtkv3.SmoothingMask{
@@ -63,13 +60,16 @@ var defaultSmoothingMask = bbtkv3.SmoothingMask{
 	Opto1: true,
 }
 
-func main() {
+func myUsage() {
+	fmt.Printf("Usage: %s [OPTIONS] thresholds\n", os.Args[0])
+	fmt.Println("Where thresholds is a string of 8 comma-separated 0-127 values, .e.g., '0,50,63,120,120,10,10,10'")
+	flag.PrintDefaults()
+}
 
+func main() {
+	flag.Usage = myUsage
 	portPtr := flag.String("p", PortAddress, "device (serial port name)")
 	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
-	durationPtr := flag.Int("d", Duration, "duration of capture (in s)")
-	outputFilenamePtr := flag.String("o", OutputFileName, "output file name for captured data")
-	debugPtr := flag.Bool("D", DEBUG, "Debug mode")
 	versionPtr := flag.Bool("V", false, "Display version")
 
 	flag.Parse()
@@ -79,7 +79,18 @@ func main() {
 		os.Exit(0)
 	}
 
-	DEBUG = *debugPtr
+	newthresholds := flag.Arg(0)
+	if newthresholds == "" {
+		myUsage()
+		os.Exit(1)
+	}
+
+	t, err := bbtkv3.ThresholdsFromString(newthresholds)
+	fmt.Printf("Will try to set thresholds to: %s\n", t.ToString())
+
+	if err != nil {
+		log.Fatalf("Error parsing thresholds: %v\n", err)
+	}
 
 	// Initialisation
 	verbose := true
@@ -119,63 +130,12 @@ func main() {
 	}
 	time.Sleep(time.Second)
 
-	// Parameters setting
-	fmt.Printf("Setting Smoothing mask to %+v\n", defaultSmoothingMask)
-	if err = b.SetSmoothing(defaultSmoothingMask); err != nil {
-		log.Printf("%v", err)
-	}
-	time.Sleep(time.Second)
-
-	fmt.Println("Getting thresholds...")
+	fmt.Println("Getting current thresholds...")
 	fmt.Printf("%+v\n", b.GetThresholds())
 
-	// Clearing internal memory
-	time.Sleep(time.Second)
-	fmt.Printf("Clearing Timing data... ")
-	b.ClearTimingData()
-	fmt.Println("Ok")
+	fmt.Printf("Setting new thresholds...: %s\n", t.ToString())
+	b.SetThresholds(t)
 
-	// Data Capture
-	time.Sleep(1 * time.Second)
-	fmt.Printf("Capturing events (with DSCM) for %v msec... ", *durationPtr)
-	data := b.CaptureEvents(*durationPtr)
-	fmt.Println("ok!")
-
-	fname, err := WriteText(*outputFilenamePtr, data)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Printf("Raw Data saved to %s\n", fname)
-
-	dscEvents, err := bbtkv3.CaptureOutputToEvents(data)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	efname := changeExtension(fname, "dscevents.csv")
-	err = bbtkv3.SaveDSCEventsToCSV(dscEvents, efname)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Printf("DSC Events saved to %s\n", efname)
-
-	// add a event with all lines set to 0 at the end of dscEvents
-	dscEvents = append(dscEvents, bbtkv3.DSCEvent{})
-
-	events, err := bbtkv3.CaptureEventsFromDSCEvents(dscEvents)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	eventsFileName := changeExtension(fname, "events.csv")
-	err = bbtkv3.SaveEventsToCSV(events, eventsFileName)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	fmt.Printf("Events saved to %s\n", eventsFileName)
-
-	// Not necessary as defer will take care of it
-	//if err = b.Disconnect(); err != nil {
-	//	log.Println(err)
-	//}
-
+	fmt.Println("Getting new thresholds...")
+	fmt.Printf("%+v\n", b.GetThresholds())
 }

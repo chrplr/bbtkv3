@@ -35,46 +35,6 @@ type bbtkv3 struct {
 	reader *bufio.Reader
 }
 
-type Thresholds struct {
-	Mic1     uint8
-	Mic2     uint8
-	Sounder1 uint8
-	Sounder2 uint8
-	Opto1    uint8
-	Opto2    uint8
-	Opto3    uint8
-	Opto4    uint8
-}
-
-var defaultThresholds = Thresholds{
-	Mic1:     0,
-	Mic2:     0,
-	Sounder1: 63,
-	Sounder2: 63,
-	Opto1:    110,
-	Opto2:    110,
-	Opto3:    110,
-	Opto4:    110,
-}
-
-type SmoothingMask struct {
-	Mic1  bool
-	Mic2  bool
-	Opto4 bool
-	Opto3 bool
-	Opto2 bool
-	Opto1 bool
-}
-
-var defaultSmoothingMask = SmoothingMask{
-	Mic1:  true,
-	Mic2:  true,
-	Opto4: false,
-	Opto3: false,
-	Opto2: true,
-	Opto1: true,
-}
-
 // init checks if the DEBUG environment variable is set.
 func init() {
 	if _, ok := os.LookupEnv("DEBUG"); ok {
@@ -121,11 +81,11 @@ func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, er
 	return &box, nil
 }
 
-// Connect initiates a connection to the bbtkv3.
+// Connect initiates a connection to the BBTK.
 func (b bbtkv3) Connect() error {
 
 	if verbose {
-		fmt.Println("Trying to connect to bbtkv3...")
+		fmt.Println("Trying to connect to BBTK...")
 	}
 
 	b.SendCommand("CONN")
@@ -313,22 +273,10 @@ func (b bbtkv3) GetThresholds() Thresholds {
 	if DEBUG {
 		fmt.Println(resp)
 	}
-	vals := strings.Split(resp, ",")
-	var x Thresholds
-	/* x := Thresholds{str2uint8(vals[0]),   TODO!!
-		str2uint8(vals[1]),
-		str2uint8(vals[2]),
-		str2uint8(vals[3]),
-		str2uint8(vals[4]),
-		str2uint8(vals[5]),
-		str2uint8(vals[6]),
-		str2uint8(vals[7])}
-	if DEBUG {
-		fmt.Println("+v", x)
+	x, err := ThresholdsFromString(resp[:len(resp)-1])
+	if err != nil {
+		fmt.Printf("In GetThresholds(): %v", err)
 	}
-	*/
-	fmt.Printf("%v", vals)
-
 	return x
 }
 
@@ -350,10 +298,6 @@ func (b bbtkv3) SetThresholds(x Thresholds) {
 
 	time.Sleep(1 * time.Second)
 }
-
-//func (b bbtkv3) SetDefaultsThresholds() {
-//	b.SetThresholds(defaultThresholds)
-//}
 
 // AdjustThresholds launches the procedure to manually set up the thresholds on the BBTK
 func (b bbtkv3) AdjustThresholds() {
@@ -411,6 +355,24 @@ func (b bbtkv3) DisplayInfoOnBBTK() {
 
 // Launches a digital data capture session.
 // duration in seconds
+// CaptureEvents captures events for a specified duration.
+// It sends a series of commands to the device and reads the data until the "EDAT" marker is found.
+//
+// Parameters:
+//   - duration: The duration in seconds for which events should be captured.
+//
+// Returns:
+//   - A string containing the captured event data.
+//
+// The function performs the following steps:
+//  1. Sends the "DSCM" command to the device.
+//  2. Sends the "TIML" command to the device.
+//  3. Sends the duration (in microseconds) to the device.
+//  4. Sends the "RUDS" command to the device.
+//  5. Waits for the specified duration minus one second.
+//  6. Reads data from the device until the "EDAT" marker is found.
+//
+// If any command fails, an error is logged. If reading from the device fails, the function logs the error and terminates the program.
 func (b bbtkv3) CaptureEvents(duration int) string {
 	var err error
 	time.Sleep(time.Second)
@@ -439,7 +401,12 @@ func (b bbtkv3) CaptureEvents(duration int) string {
 	}
 
 	waitingDuration := time.Duration(duration-1) * time.Second
-	time.Sleep(waitingDuration)
+	// time.Sleep(waitingDuration)
+	for i := int(waitingDuration.Seconds()); i > 0; i-- {
+		fmt.Printf("%d ", i)
+		time.Sleep(1. * time.Second)
+	}
+	fmt.Println()
 
 	if DEBUG {
 		fmt.Println("Waiting for data...")

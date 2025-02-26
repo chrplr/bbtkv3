@@ -177,15 +177,26 @@ cd bbtkv3
 go build ./... 
 ```
 
-This should generate the `bbtk` executable in the folder `cmd/bbtk`
+This should generate executables in each subfolder of `cmd`
 
 For cross-compiling:
 
 ```bash
-./build.sh
+./build-mutliplatforms.sh X.X.X
 ```
 
-The outcome is in `binaries/`
+where X.X.X is a version number
+
+The outcome will be in `binaries/`
+
+> [!NOTE]
+> You can set the `PLATFORMS` and `ARCHITECTURES` to target a subset of OS and ARCH, e.g.:
+
+```bash
+export PLATFORMS=linux
+export ARCHITECTURES=amd64
+./build-mutliplatforms.sh X.X.X
+```
 
 ---
 

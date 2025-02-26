@@ -44,25 +44,19 @@ func changeExtension(filename string, newExt string) string {
 	return strings.TrimSuffix(filename, ext) + newExt
 }
 
-// WriteText writes the provided text to a file which name is formed from basename, avoiding to erase existing files.
-// It returns the full path of the created file and an error if any occurs during the process.
-//
-// Parameters:
-//   - basename: The base name of the file to be created.
-//   - text: The text content to be written to the file.
-//
-// Returns:
-//   - string: The full path of the created file.
-//   - error: An error if any occurs during the file writing process.
-func WriteText(basename string, text string) (string, error) {
-	var filename string = basename
-
+func GetNextFileName(basename string) string {
 	ext := filepath.Ext(basename)
 	name := strings.TrimSuffix(basename, ext)
+	filename := fmt.Sprintf("%s-%03d%s", name, 1, ext)
 
 	for i := 2; fileExists(filename); i++ {
 		filename = fmt.Sprintf("%s-%03d%s", name, i, ext)
 	}
+	return filename
+}
+
+func WriteText(basename string, text string) (string, error) {
+	var filename string = GetNextFileName(basename)
 
 	f, err := os.Create(filename)
 	if err != nil {
