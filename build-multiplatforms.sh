@@ -3,13 +3,25 @@
 #
 # Multiplatform Go cross-compilation of all cmd/* commands
 
-VERSION=1.0.1
+
+if [ "$#" -ne 1 ]
+then
+	echo "Usage: $0 VERSION (where VERSION is X.Y.Z)"
+  	exit 1
+fi
+
+VERSION=$1
 BUILD=$(git rev-parse HEAD)
 PLATFORMS="darwin linux windows"
 ARCHITECTURES="amd64 arm64"
 COMMANDS=$(\ls cmd)
+BUILD_FOLDER=./binaries
 
-set +x
+echo Building ${COMMANDS} 
+echo for PLATFORMS=${PLATFORMS} 
+echo for ARCHITECTURES=${ARCHITECTURES}
+echo executables will be in "${BUILD_FOLDER}"
+echo 
 
 for OS in $PLATFORMS;
 do
@@ -19,7 +31,7 @@ do
 	do
 	    export GOOS=${OS}
 	    export GOARCH=${ARCH}
-	    go build -o binaries/${CMD}-${GOOS}-${GOARCH} -ldflags="-X main.Version=${VERSION} -X main.Build=${BUILD}" ./cmd/${CMD}
+	    go build -o ${BUILD_FOLDER}/${CMD}-${GOOS}-${GOARCH}-${VERSION} -ldflags="-X main.Version=${VERSION} -X main.Build=${BUILD}" ./cmd/${CMD}
         done
     done    
 done

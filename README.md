@@ -4,9 +4,13 @@ Automated capture of events with a Black Box ToolKit(tm)
 The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
  generating sounds or TTL signals.
 
-This page describes `bbtk`, a program available at <https://github.com/chrplr/bbtkv3/releases>, that launches the capture of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.
+This page describes a set of command-line tools that launches the capture of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.  
 
-This program relies on a Go module, [`github.com/chrplr/bbtkv3`](https://github.com/chrplr/bbtkv3), which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, possibly, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
+Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
+
+The source code (under a GPL-3.0 License) at <https://github.com/chrplr/bbtkv3>
+
+This program relies on a Go module, `github.com/chrplr/bbtkv3`, which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
 
 | :exclamation: This is a **Work In Progress**. |
@@ -30,24 +34,31 @@ To operate, three pieces of equipement are needed:
 As data are recorded asynchronously by the BBTKvr3, it is possible for a single PC to switch the BBTKv2 into “capture mode”, launch the stimulation program and, when done, download the timing data from the BBTKv3 memory.
 
 
-# Running bbtk
+# Usage
 
-The programs are to be run on a command line, in a Terminal. 
+The tools are meant to be ran on the command line. You must therefore open a Terminal to execute them (e.g., under Windows, start `cmd` or `Powershell`). 
 
-Open a terminal (e.g. start `cmd` under Windows), and type:
+Provided the tools are in the PATH (see below), you can just type:
 
 ```bash
-bbtk
+$ bbtk-detect-port
+BBTK found at  COM4
+$ bbtk-adjust-thresholds -p COM4
+$ bbtk-capture -p COM4 -d 120
+... 
 ``` 
 
-This should launch a 30s acquisition. 
+To launch a 2min acquisition. 
+When completed, `.dat` and `.events.csv` files will contain the information about detected events.
 
 
-`bbtk -h` will display the usage, e.g.:
-
+```bash
+bbtk-capture -h
+```
+ will yield some help:
 
 ```
-Usage of bbtk:
+Usage of bbtk-capture:
   -D	Debug mode
   -V	Display version
   -b int
@@ -60,32 +71,31 @@ Usage of bbtk:
     	device (serial port name) (default "/dev/ttyUSB0")
 ```
 
-> [!NOTE]
->  Another program, `bbtk-adjust-thresholds` allows you the set the sensors' thresholds before doing the capture.
 
 
 # Installation
 
-Compiled versions for MACOSX, Windows and Linux, and intel (amd64) or arm are avavailable in <https://github.com/chrplr/bbtkv3/releases>.
+Compiled versions for MACOSX, Windows and Linux, and intel (amd64) or arm are available at <https://github.com/chrplr/bbtkv3/releases>.
 
-Get the versions for your OS and architecture, rename it to your liking, e.g. `bbtk` and `bbtk-adjust-thresholds`, and copy them to any folder listed in the `PATH` variable of your OS (e.g. `%windir%/system32` for Windows)
+Get the versions for your OS and architecture, rename them to your liking (I would strip the OS-PLATFORM-VERSION), and copy them to some folder listed in the `PATH` variable of your OS. 
 
 | :zap: Windows |
 |---------------|
 
-
+In the command line terminal application, CMD, type:
 
 ```bash
 cd Downloads
 
 % rename the executable
-ren bbtk-windows-arm64  bbtk.exe
-ren bbtk-adjust-thresholds-windows-arm64  bbtk-adjust-thresholds.exe
-
-
-% run (assuming that the BBTK is linked to COM4)
-bbtk -p COM4
+ren bbtk-capture-windows-arm64-1.0.1  bbtk-capture.exe
+ren bbtk-adjust-thresholds-windows-arm64-1.0.1  bbtk-adjust-thresholds.exe
 ```
+
+Then copy the new`*.exe` files into a folder, say /home/user/bin, and add this folder to the system's PATH environment variable (see <https://www.eukhost.com/kb/how-to-add-to-the-path-on-windows-10-and-windows-11/>).
+
+Now , when you launch CMd, you should be able to execute any of these program by typing its name and pressing 'Enter'.
+
 
 | :zap: MacOS X |
 |---------------|
@@ -96,15 +106,10 @@ Assuming that you downloaded the programs in `~/Downloads` and want to install t
 ```zsh
 mkdir -p ~/bin
 cd ~/Downloads
-for f in bbtk*; do chmod +x $f; mv $f ~/bin/${f%-linux-amd64}; done
+for f in bbtk*; do chmod +x $f; mv $f ~/bin/${f%-linux-amd64-1.0.1}; done
 ```
 
-You will need to authorize the programs to be executed.
-And determine the serial port of the BBTK
-
-```
-bbtk -p /dev/cu.usbserial.BBTKXXXX
-```
+(replace the version number by the current one)
 
 
 | :zap: Linux |
@@ -116,11 +121,13 @@ Assuming that you downloaded the programs in `~/Downloads` and want to install t
 ```bash
 mkdir -p ~/bin
 cd ~/Downloads
-for f in bbtk*; do chmod +x $f; mv $f ~/bin/${f%-linux-amd64}; done
+for f in bbtk*; do chmod +x $f; mv $f ~/bin/${f%-linux-amd64-1.0.1}; done
 
 #run
 bbtk -p /dev/ttypACM0
 ```
+
+(replace the version number by the current one)
 
 # Troubleshooting
 
