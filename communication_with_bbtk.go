@@ -45,6 +45,14 @@ func init() {
 	}
 }
 
+func GetPortFromEnv() string {
+	if val, ok := os.LookupEnv("BBTK_PORT"); ok {
+		return val
+	} else {
+		return ""
+	}
+}
+
 // NewBbtkv3 creates a new bbtkv3 object, connecting to the serial device at portAddress.
 func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, error) {
 	var box bbtkv3
@@ -353,8 +361,6 @@ func (b bbtkv3) DisplayInfoOnBBTK() {
 	time.Sleep(1. * time.Second)
 }
 
-// Launches a digital data capture session.
-// duration in seconds
 // CaptureEvents captures events for a specified duration.
 // It sends a series of commands to the device and reads the data until the "EDAT" marker is found.
 //

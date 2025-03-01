@@ -81,9 +81,16 @@ func main() {
 
 	DEBUG = *debugPtr
 
+	serPort := ""
+	if *portPtr != "" {
+		serPort = *portPtr
+	} else {
+		serPort = bbtkv3.GetPortFromEnv()
+	}
+
 	// Initialisation
 	verbose := true
-	b, err := bbtkv3.NewBbtkv3(*portPtr, *speedPtr, verbose)
+	b, err := bbtkv3.NewBbtkv3(serPort, *speedPtr, verbose)
 	if err != nil {
 		log.Fatalln(err)
 	}

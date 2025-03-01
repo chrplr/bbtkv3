@@ -62,7 +62,7 @@ var defaultSmoothingMask = bbtkv3.SmoothingMask{
 
 func myUsage() {
 	fmt.Printf("Usage: %s [OPTIONS] thresholds\n", os.Args[0])
-	fmt.Println("Where thresholds is a string of 8 comma-separated 0-127 values, .e.g., '0,50,63,120,120,10,10,10'")
+	fmt.Println("Where thresholds is a string of 8 comma-separated 0-127 values, .e.g., '63,63,32,32,100,100,100,100'")
 	flag.PrintDefaults()
 }
 
