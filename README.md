@@ -4,7 +4,12 @@ Automated capture of events with a Black Box ToolKit(tm)
 The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
  generating sounds or TTL signals.
 
-This page describes a set of command-line tools that launches the capture of events on the Black Box ToolKit and export them to `.csv` files, without manual interventation. This streamlines the testing of time sensitive psychology experiments.  
+This page describes a set of command-line tools that streamline the testing of time-critical psychology experiments:  
+
+* `bbtk-adjust-thresholds` which  opens the "sensor menu" on the BBTK 
+* `bbtk-set-thresholds` which sets the values of the various thresholds
+* `bbtk-capture` which launches the capture of events and export them to `.csv` files.
+
 
 Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
 
