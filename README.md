@@ -19,11 +19,6 @@ The source code (under a GPL-3.0 License) at <https://github.com/chrplr/bbtkv3>
 This program relies on a Go module, `github.com/chrplr/bbtkv3`, which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
 
-| :exclamation: This is a **Work In Progress**. |
-|-----------------------------------------------|
-
-The program may not work as advertised, the documentation may not be up to date, etc.  You can contribute by proposing improvements or reporting bugs either by contacting me (`<christophe@pallier.org>`) or by opening an issue at <https://github.com/chrplr/bbtkv3/issues>.
-
 # Principle of operation
 
 ![](images/bbtkv3.jpg)
@@ -121,6 +116,11 @@ for f in bbtk*; do chmod +x $f; mv $f ~/bin/${f%-linux-amd64-1.0.1}; done
 | :zap: Linux |
 |-------------|
 
+Make sure that you are part of the `dialout` group. 
+
+```
+sudo usermod -a -G dialout $USER
+```
 
 Assuming that you downloaded the programs in `~/Downloads` and want to install them in `~/bin`:
 
@@ -134,7 +134,6 @@ bbtk -p /dev/ttypACM0
 ```
 
 (replace the version number by the current one)
-
 # ibbtk — interactive shell
 
 `ibbtk` is an interactive menu-driven shell for communicating with the BBTKv3. Rather than running separate commands, it keeps a persistent connection open and lets you issue commands one by one.
