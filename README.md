@@ -4,11 +4,12 @@ Automated capture of events with a Black Box ToolKit(tm)
 The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
  generating sounds or TTL signals.
 
-This page describes a set of command-line tools that streamline the testing of time-critical psychology experiments:  
+This page describes a set of command-line tools that streamline the testing of time-critical psychology experiments:
 
-* `bbtk-adjust-thresholds` which  opens the "sensor menu" on the BBTK 
+* `bbtk-adjust-thresholds` which opens the "sensor menu" on the BBTK
 * `bbtk-set-thresholds` which sets the values of the various thresholds
-* `bbtk-capture` which launches the capture of events and export them to `.csv` files.
+* `bbtk-capture` which launches the capture of events and exports them to `.csv` files
+* `ibbtk` an interactive shell that keeps a persistent connection and exposes all of the above through a nested menu interface
 
 
 Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
@@ -134,6 +135,95 @@ bbtk -p /dev/ttypACM0
 
 (replace the version number by the current one)
 
+# ibbtk — interactive shell
+
+`ibbtk` is an interactive menu-driven shell for communicating with the BBTKv3. Rather than running separate commands, it keeps a persistent connection open and lets you issue commands one by one.
+
+## Starting ibbtk
+
+```bash
+ibbtk -p /dev/ttyUSB0        # Linux
+ibbtk -p COM4                 # Windows
+ibbtk -p /dev/cu.usbserial-BBTKXXXX   # macOS
+```
+
+The port can also be set via the `BBTK_PORT` environment variable, in which case `-p` can be omitted.
+
+```
+Options:
+  -p string   serial port (or set BBTK_PORT)
+  -b int      baudrate (default 115200)
+  -v          verbose connection output
+  -V          display version and exit
+```
+
+## Command structure
+
+Once connected, `ibbtk` presents a prompt. Type `menu` at any prompt to list available commands, and `exit` to leave the current level (or quit the program from the top level).
+
+### Top-level commands
+
+| Command | Description |
+|---------|-------------|
+| `status` | Check whether the device is alive and show firmware version |
+| `info` | Display copyright/firmware info on the device LCD |
+| `thresholds` | Enter the thresholds sub-menu |
+| `smoothing` | Enter the smoothing sub-menu |
+| `capture` | Enter the capture sub-menu |
+| `flush` | Flush the serial output buffer |
+| `reset` | Reset serial input/output buffers |
+| `raw <CMD>` | Send a raw protocol command and print one response line |
+
+### `thresholds` sub-menu
+
+| Command | Description |
+|---------|-------------|
+| `get` | Read the current thresholds from the device |
+| `set <values>` | Set all eight thresholds, e.g. `set 63,63,32,32,100,100,100,100` (Mic1, Mic2, Sounder1, Sounder2, Opto1–4; range 0–127) |
+| `adjust` | Launch the interactive threshold adjustment procedure on the device |
+
+### `smoothing` sub-menu
+
+| Command | Description |
+|---------|-------------|
+| `set <mask>` | Set the smoothing mask, e.g. `set 1;1;0;0;1;1` (fields: Mic1;Mic2;Opto4;Opto3;Opto2;Opto1) |
+| `default` | Enable smoothing on all sensors |
+
+### `capture` sub-menu
+
+| Command | Description |
+|---------|-------------|
+| `run <seconds> [output.dat]` | Clear device memory, capture for the given duration, and save `.dat`, `.dscevents.csv`, and `.events.csv` files (default output name: `ibbtk-capture.dat`) |
+| `clear` | Erase the device timing memory |
+
+## Example session
+
+```
+$ ibbtk -p /dev/ttyUSB0
+Connected to BBTKv3. Type 'menu' for commands, 'exit' to quit.
+ibbtk> status
+BBTKv3 is alive
+Firmware: 3.14
+ibbtk> thresholds
+thresholds> get
+{Mic1:63 Mic2:63 Sounder1:32 Sounder2:32 Opto1:100 Opto2:100 Opto3:100 Opto4:100}
+thresholds> set 63,63,32,32,80,80,80,80
+Thresholds now: {Mic1:63 Mic2:63 Sounder1:32 Sounder2:32 Opto1:80 Opto2:80 Opto3:80 Opto4:80}
+thresholds> exit
+Exiting...
+ibbtk> capture
+capture> run 30 myexp.dat
+Clearing timing data... ok
+Capturing for 30 seconds...
+Raw data saved to myexp.dat
+DSC events saved to myexp.dscevents.csv
+Events saved to myexp.events.csv (12 events detected)
+capture> exit
+Exiting...
+ibbtk> exit
+Exiting...
+```
+
 # Troubleshooting
 
 > [!WARNING]
@@ -179,15 +269,15 @@ To build the executable, you need the [Go development tools](https://go.dev/) (a
 ```
 git clone https://github.com/chrplr/bbtkv3.git
 cd bbtkv3  
-go build ./... 
+make build
 ```
 
-This should generate executables in each subfolder of `cmd`
+This will generate executables in `_build/`.
 
 For cross-compiling:
 
 ```bash
-./build-mutliplatforms.sh X.X.X
+./build-multiplatforms.sh X.X.X
 ```
 
 where X.X.X is a version number
@@ -200,7 +290,7 @@ The outcome will be in `binaries/`
 ```bash
 export PLATFORMS=linux
 export ARCHITECTURES=amd64
-./build-mutliplatforms.sh X.X.X
+./build-multiplatforms.sh X.X.X
 ```
 
 ---

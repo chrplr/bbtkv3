@@ -111,6 +111,11 @@ func main() {
 	time.Sleep(time.Second)
 
 	fmt.Println("Getting current thresholds...")
-	fmt.Printf("%+v\n", b.GetThresholds())
+	thresholds, err := b.GetThresholds()
+	if err != nil {
+		log.Printf("GetThresholds: %v\n", err)
+	} else {
+		fmt.Printf("%+v\n", thresholds)
+	}
 
 }

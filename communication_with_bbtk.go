@@ -90,7 +90,7 @@ func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, er
 }
 
 // Connect initiates a connection to the BBTK.
-func (b bbtkv3) Connect() error {
+func (b *bbtkv3) Connect() error {
 
 	if verbose {
 		fmt.Println("Trying to connect to BBTK...")
@@ -115,13 +115,13 @@ func (b bbtkv3) Connect() error {
 }
 
 // Disconnect closes the connection to the bbtkv3.
-func (b bbtkv3) Disconnect() error {
+func (b *bbtkv3) Disconnect() error {
 	//b.SendBreak()
 	return b.port.Close()
 }
 
 // SendBreak send a serial break to the bbtk. Useful on the bbtkv2 when the box is stucked, but HARMFUL on the bbtkv3 !!! So disabled.
-func (b bbtkv3) SendBreak() {
+func (b *bbtkv3) SendBreak() {
 	//if DEBUG {
 	//	log.Println("Sending serial break.")
 	//}
@@ -130,7 +130,7 @@ func (b bbtkv3) SendBreak() {
 }
 
 // ResetSerialBuffers purges the input and output buffers of the serial port.
-func (b bbtkv3) ResetSerialBuffers() error {
+func (b *bbtkv3) ResetSerialBuffers() error {
 	if err := b.port.ResetInputBuffer(); err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (b bbtkv3) ResetSerialBuffers() error {
 }
 
 // SendCommand adds CRLF to cmd and send it to the BBTK
-func (b bbtkv3) SendCommand(cmd string) error {
+func (b *bbtkv3) SendCommand(cmd string) error {
 
 	if DEBUG {
 		log.Printf("SendCommand: \"%v\"\n", cmd)
@@ -153,7 +153,7 @@ func (b bbtkv3) SendCommand(cmd string) error {
 }
 
 // ReadLine returns the next line output by the BBTK
-func (b bbtkv3) ReadLine() (string, error) {
+func (b *bbtkv3) ReadLine() (string, error) {
 	var s string
 	var err error
 	if s, err = b.reader.ReadString('\n'); err != nil {
@@ -168,7 +168,7 @@ func (b bbtkv3) ReadLine() (string, error) {
 
 // IsAlive sends an 'ECHO' command to the bbtkv3 and expects 'ECHO' in return.
 // This permits to check that the bbtkv3 is up and running.
-func (b bbtkv3) IsAlive() (bool, error) {
+func (b *bbtkv3) IsAlive() (bool, error) {
 
 	if err := b.SendCommand("ECHO"); err != nil {
 		return false, fmt.Errorf("IsAlive: %w", err)
@@ -191,7 +191,7 @@ func (b bbtkv3) IsAlive() (bool, error) {
 // When smoothing is 'off', the BBTK will detect *all* leading edges, e.g.
 // each refresh on a CRT.
 // When smoothing is 'on', you need to subtract 20ms from offset times.
-func (b bbtkv3) SetSmoothing(mask SmoothingMask) error {
+func (b *bbtkv3) SetSmoothing(mask SmoothingMask) error {
 	if err := b.SendCommand("SMOO"); err != nil {
 		return fmt.Errorf("SetSmoothing: %w", err)
 	}
@@ -245,7 +245,7 @@ func (b bbtkv3) SetSmoothing(mask SmoothingMask) error {
 
 // FLUS command attempts to clear the USB output buffer.
 // If this fails you may need to send a Serial Break with SendBreak().
-func (b bbtkv3) Flush() error {
+func (b *bbtkv3) Flush() error {
 	if err := b.SendCommand("FLUS"); err != nil {
 		return err
 	}
@@ -255,13 +255,15 @@ func (b bbtkv3) Flush() error {
 
 // Retrieves the version of the BBTK firmware
 // currently running in the ARM chip.
-func (b bbtkv3) GetFirmwareVersion() string {
-	b.SendCommand("FIRM")
+func (b *bbtkv3) GetFirmwareVersion() (string, error) {
+	if err := b.SendCommand("FIRM"); err != nil {
+		return "", fmt.Errorf("GetFirmwareVersion: %w", err)
+	}
 	resp, err := b.ReadLine()
 	if err != nil {
-		fmt.Printf("In GetFirmWareVersion(): %v", err)
+		return "", fmt.Errorf("GetFirmwareVersion: %w", err)
 	}
-	return resp
+	return resp, nil
 }
 
 func str2uint8(s string) uint8 {
@@ -272,20 +274,22 @@ func str2uint8(s string) uint8 {
 	return uint8(num)
 }
 
-func (b bbtkv3) GetThresholds() Thresholds {
-	b.SendCommand("GEPV")
+func (b *bbtkv3) GetThresholds() (Thresholds, error) {
+	if err := b.SendCommand("GEPV"); err != nil {
+		return Thresholds{}, fmt.Errorf("GetThresholds: %w", err)
+	}
 	resp, err := b.ReadLine()
 	if err != nil {
-		fmt.Printf("In GetThresholds(): %v", err)
+		return Thresholds{}, fmt.Errorf("GetThresholds: %w", err)
 	}
 	if DEBUG {
 		fmt.Println(resp)
 	}
-	x, err := ThresholdsFromString(resp[:len(resp)-1])
+	x, err := ThresholdsFromString(resp)
 	if err != nil {
-		fmt.Printf("In GetThresholds(): %v", err)
+		return Thresholds{}, fmt.Errorf("GetThresholds: %w", err)
 	}
-	return x
+	return x, nil
 }
 
 // Sets the sensor activation thresholds for the eight
@@ -293,22 +297,29 @@ func (b bbtkv3) GetThresholds() Thresholds {
 // Sounder volume (amplitude) and Opto luminance
 // activation threshold. Activation thresholds range
 // from 0-127.
-func (b bbtkv3) SetThresholds(x Thresholds) {
-	b.SendCommand("SEPV")
-	b.SendCommand(fmt.Sprintf("%d", x.Mic1))
-	b.SendCommand(fmt.Sprintf("%d", x.Mic2))
-	b.SendCommand(fmt.Sprintf("%d", x.Sounder1))
-	b.SendCommand(fmt.Sprintf("%d", x.Sounder2))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto1))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto2))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto3))
-	b.SendCommand(fmt.Sprintf("%d", x.Opto4))
-
+func (b *bbtkv3) SetThresholds(x Thresholds) error {
+	cmds := []string{
+		"SEPV",
+		fmt.Sprintf("%d", x.Mic1),
+		fmt.Sprintf("%d", x.Mic2),
+		fmt.Sprintf("%d", x.Sounder1),
+		fmt.Sprintf("%d", x.Sounder2),
+		fmt.Sprintf("%d", x.Opto1),
+		fmt.Sprintf("%d", x.Opto2),
+		fmt.Sprintf("%d", x.Opto3),
+		fmt.Sprintf("%d", x.Opto4),
+	}
+	for _, cmd := range cmds {
+		if err := b.SendCommand(cmd); err != nil {
+			return fmt.Errorf("SetThresholds: %w", err)
+		}
+	}
 	time.Sleep(1 * time.Second)
+	return nil
 }
 
 // AdjustThresholds launches the procedure to manually set up the thresholds on the BBTK
-func (b bbtkv3) AdjustThresholds() {
+func (b *bbtkv3) AdjustThresholds() {
 	b.SendCommand("AJPV")
 	response, _ := b.ReadLine()
 	for response != "Done;" {
@@ -323,40 +334,43 @@ func (b bbtkv3) AdjustThresholds() {
 // ClearTimingData either formats the whole of the BBTK's internal
 // RAM (on first power up or after a reset) or erases
 // only previously used sectors.
-func (b bbtkv3) ClearTimingData() {
-	b.SendCommand("SPIE")
+func (b *bbtkv3) ClearTimingData() error {
+	if err := b.SendCommand("SPIE"); err != nil {
+		return fmt.Errorf("ClearTimingData: %w", err)
+	}
 
 	response, err := b.ReadLine()
 	if err != nil {
-		fmt.Printf("ClearTimingData: %v", err)
+		return fmt.Errorf("ClearTimingData reading first response: %w", err)
 	}
 	if response != "FRMT;" && response != "ESEC;" {
-		fmt.Printf("Warning: ClearTimingData expected \"FRMT;\" or \"ESEC;\", got \"%v\"", response)
+		log.Printf("Warning: ClearTimingData expected \"FRMT;\" or \"ESEC;\", got %q", response)
 	}
 
 	response, err = b.ReadLine()
 	if err != nil {
-		log.Fatalf("ClearTimingData @ call ReadLine(): %v", err)
+		return fmt.Errorf("ClearTimingData reading DONE: %w", err)
 	}
 
 	for response != "DONE;" {
 		if DEBUG {
-			fmt.Printf("Warning: ClearTimingData expected \"DONE;\", got \"%v\"", response)
+			log.Printf("ClearTimingData: waiting for DONE, got %q", response)
 		}
 
 		time.Sleep(100. * time.Millisecond)
 		response, err = b.ReadLine()
 		if err != nil {
-			log.Fatalf("ClearTimingData: %v", err)
+			return fmt.Errorf("ClearTimingData: %w", err)
 		}
 	}
 
 	time.Sleep(time.Second)
+	return nil
 }
 
 // DisplayInfoOnBBTK causes the BBTK to display a copyright notice
 // and release date of the firmware it is running on its LCD screen.
-func (b bbtkv3) DisplayInfoOnBBTK() {
+func (b *bbtkv3) DisplayInfoOnBBTK() {
 	b.SendCommand("ABOU")
 	time.Sleep(1. * time.Second)
 }
@@ -379,7 +393,7 @@ func (b bbtkv3) DisplayInfoOnBBTK() {
 //  6. Reads data from the device until the "EDAT" marker is found.
 //
 // If any command fails, an error is logged. If reading from the device fails, the function logs the error and terminates the program.
-func (b bbtkv3) CaptureEvents(duration int) string {
+func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 	var err error
 	time.Sleep(time.Second)
 	err = b.SendCommand("DSCM")
@@ -423,8 +437,7 @@ func (b bbtkv3) CaptureEvents(duration int) string {
 	for {
 		n, err := b.port.Read(buff)
 		if err != nil {
-			log.Fatal(err)
-			break
+			return "", fmt.Errorf("CaptureEvents: %w", err)
 		}
 		if n > 0 {
 			text += string(buff[:n])
@@ -434,6 +447,6 @@ func (b bbtkv3) CaptureEvents(duration int) string {
 		}
 	}
 
-	return text
+	return text, nil
 
 }

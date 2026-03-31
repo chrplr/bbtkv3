@@ -134,18 +134,28 @@ func main() {
 	time.Sleep(time.Second)
 
 	fmt.Println("Getting thresholds...")
-	fmt.Printf("%+v\n", b.GetThresholds())
+	thresholds, err := b.GetThresholds()
+	if err != nil {
+		log.Printf("GetThresholds: %v\n", err)
+	} else {
+		fmt.Printf("%+v\n", thresholds)
+	}
 
 	// Clearing internal memory
 	time.Sleep(time.Second)
 	fmt.Printf("Clearing Timing data... ")
-	b.ClearTimingData()
+	if err := b.ClearTimingData(); err != nil {
+		log.Fatalf("ClearTimingData: %v\n", err)
+	}
 	fmt.Println("Ok")
 
 	// Data Capture
 	time.Sleep(1 * time.Second)
 	fmt.Printf("Capturing events (with DSCM) for %v seconds... ", *durationPtr)
-	data := b.CaptureEvents(*durationPtr)
+	data, err := b.CaptureEvents(*durationPtr)
+	if err != nil {
+		log.Fatalf("CaptureEvents: %v\n", err)
+	}
 	fmt.Println("ok!")
 
 	fname, err := WriteText(*outputFilenamePtr, data)

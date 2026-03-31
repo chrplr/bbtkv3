@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"go.bug.st/serial"
@@ -17,25 +18,25 @@ var (
 	DEBUG    = false
 )
 
-func ReadData(port serial.Port) string {
+func ReadData(port serial.Port) (string, error) {
 	byteBuff := bytes.NewBufferString("")
 	buff := make([]byte, 100)
 
 	err := port.SetReadTimeout(time.Second)
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("ReadData: %w", err)
 	}
 
 	for {
 
 		n, err := port.Read(buff)
 		if err != nil {
-			panic(err)
+			return "", fmt.Errorf("ReadData: %w", err)
 		}
 
 		//0 means we hit the timeout.
 		if n == 0 {
-			return byteBuff.String()
+			return byteBuff.String(), nil
 		}
 
 		byteBuff.Write(buff[:n])
@@ -49,12 +50,18 @@ func CheckIfBBTKConnectedAt(port serial.Port) bool {
 	_, err := port.Write([]byte("CONN\r\n"))
 	if err != nil {
 		fmt.Println(err)
+		return false
 	}
-	resp := ReadData(port)
+	resp, err := ReadData(port)
+	if err != nil || len(resp) == 0 {
+		return false
+	}
 	return resp[:len(resp)-1] == "BBTK;"
 }
 
-func ScanSerialPortForBBTK(portName string) {
+func ScanSerialPortForBBTK(portName string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	mode := &serial.Mode{
 		BaudRate: Baudrate,
 		Parity:   serial.NoParity,
@@ -64,7 +71,8 @@ func ScanSerialPortForBBTK(portName string) {
 
 	p, err := serial.Open(portName, mode)
 	if err != nil {
-		fmt.Println("Error while trying to open", portName, " at ", Baudrate, "bps", err)
+		fmt.Println("Error while trying to open", portName, "at", Baudrate, "bps:", err)
+		return
 	}
 	defer p.Close()
 	if DEBUG {
@@ -98,9 +106,11 @@ func main() {
 		fmt.Println("No serial ports found!")
 	} else {
 		fmt.Printf("Scanning %v for a BBTK...\n", portlist)
+		var wg sync.WaitGroup
 		for _, p := range portlist {
-			go ScanSerialPortForBBTK(p)
+			wg.Add(1)
+			go ScanSerialPortForBBTK(p, &wg)
 		}
+		wg.Wait()
 	}
-	time.Sleep(2. * time.Second)
 }

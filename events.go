@@ -164,22 +164,22 @@ func SaveDSCEventsToCSV(events []DSCEvent, filename string) error {
 	return nil
 }
 
-// LocateEdges finds the positions of leading and falling edges in a binary sequence
+// LocateEdges finds the positions of leading and falling edges in a binary sequence.
+// If the sequence starts at 1 (sensor already active), a leading edge at position 0
+// is recorded. If it ends at 1 (sensor still active), there is no corresponding
+// falling edge; the caller is responsible for handling that incomplete event.
 func LocateEdges(sequence []int) ([]Edge, []Edge, error) {
 	if len(sequence) <= 2 {
 		return nil, nil, errors.New("sequence too short")
 	}
 
-	// Check baseline conditions
-	if sequence[0] != 0 {
-		return nil, nil, errors.New("signal must start at baseline (0)")
-	}
-	if sequence[len(sequence)-1] != 0 {
-		return nil, nil, errors.New("signal must end at baseline (0)")
-	}
-
 	var leadingEdges []Edge
 	var fallingEdges []Edge
+
+	// If the signal is already high at the start, record a leading edge at position 0.
+	if sequence[0] == 1 {
+		leadingEdges = append(leadingEdges, Edge{Position: 0})
+	}
 
 	// Find edges by comparing adjacent values
 	for i := 1; i < len(sequence); i++ {
@@ -207,12 +207,8 @@ func CaptureEventsFromDSCEvents(rawEvents []DSCEvent) ([]Event, error) {
 		sequence := make([]int, len(rawEvents))
 		timestamps := make([]float64, len(rawEvents))
 
-		// Force first value to 0 (baseline)
-		sequence[0] = 0
-		timestamps[0] = rawEvents[0].Timestamp
-
-		// Fill the rest of the sequence
-		for i := 1; i < len(rawEvents); i++ {
+		// Fill the sequence with actual port states and timestamps
+		for i := 0; i < len(rawEvents); i++ {
 			sequence[i] = rawEvents[i].PortStates[portName]
 			timestamps[i] = rawEvents[i].Timestamp
 		}
@@ -230,6 +226,10 @@ func CaptureEventsFromDSCEvents(rawEvents []DSCEvent) ([]Event, error) {
 
 		// Create events from edges
 		for i := 0; i < len(leadingEdges); i++ {
+			if i >= len(fallingEdges) {
+				// Signal still active at end of capture; no falling edge available.
+				break
+			}
 			event := Event{
 				Type:     portName,
 				Onset:    timestamps[leadingEdges[i].Position],

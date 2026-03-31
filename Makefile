@@ -1,27 +1,31 @@
-# Simple Makefile for a Go project
+VERSION ?= dev
+BUILD_DIR := _build
 
-# Build the application
+CMDS := bbtk-capture bbtk-detect-port bbtk-adjust-thresholds \
+        bbtk-get-thresholds bbtk-set-thresholds bbtk-set-smoothing \
+        get-serial-port-list ibbtk
+
+GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+LDFLAGS := -ldflags "\
+  -X github.com/chrplr/bbtkv3.Version=$(VERSION) \
+  -X github.com/chrplr/bbtkv3.Build=$(GIT_HASH) \
+  -X main.Version=$(VERSION) \
+  -X main.Build=$(GIT_HASH)"
+
 all: build test
 
-build:
-	@echo "Building..."
-	
-	
-	@go build ./... 
+build: $(addprefix $(BUILD_DIR)/, $(CMDS))
 
-# Run the application
-run:
-	#@go run cmd/api/main.go
+$(BUILD_DIR)/%:
+	@mkdir -p $(BUILD_DIR)
+	go build $(LDFLAGS) -o $@ ./cmd/$*
 
-# Test the application
 test:
 	@echo "Testing..."
 	@go test ./... -v
 
-# Clean the binary
 clean:
 	@echo "Cleaning..."
-	@rm -f main
+	@rm -rf $(BUILD_DIR)
 
-
-.PHONY: all build run test clean 
+.PHONY: all build test clean

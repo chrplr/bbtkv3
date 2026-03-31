@@ -76,7 +76,9 @@ func main() {
 	time.Sleep(100 * time.Millisecond)
 
 	fmt.Println("Connected to the BBTKv3. Getting thresholds...")
-	b.GetThresholds()
+	if _, err := b.GetThresholds(); err != nil {
+		log.Printf("GetThresholds: %v\n", err)
+	}
 
 	fmt.Println("The BBTKv3 is now in Threshold setting mode...")
 	b.AdjustThresholds()

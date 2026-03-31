@@ -131,11 +131,21 @@ func main() {
 	time.Sleep(time.Second)
 
 	fmt.Println("Getting current thresholds...")
-	fmt.Printf("%+v\n", b.GetThresholds())
+	if thresholds, err := b.GetThresholds(); err != nil {
+		log.Printf("GetThresholds: %v\n", err)
+	} else {
+		fmt.Printf("%+v\n", thresholds)
+	}
 
 	fmt.Printf("Setting new thresholds...: %s\n", t.ToString())
-	b.SetThresholds(t)
+	if err := b.SetThresholds(t); err != nil {
+		log.Printf("SetThresholds: %v\n", err)
+	}
 
 	fmt.Println("Getting new thresholds...")
-	fmt.Printf("%+v\n", b.GetThresholds())
+	if thresholds, err := b.GetThresholds(); err != nil {
+		log.Printf("GetThresholds: %v\n", err)
+	} else {
+		fmt.Printf("%+v\n", thresholds)
+	}
 }
