@@ -46,6 +46,7 @@ func ThresholdsFromString(s string) (Thresholds, error) {
 	// Parse each value to uint8
 	var values [8]uint8
 	for i, part := range parts {
+		part = strings.TrimSuffix(part, ";")
 		val, err := strconv.ParseUint(part, 10, 8)
 		if err != nil {
 			return t, fmt.Errorf("invalid value at position %d: %v", i, err)
