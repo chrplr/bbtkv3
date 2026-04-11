@@ -3,7 +3,7 @@ BUILD_DIR := _build
 
 CMDS := bbtk-capture bbtk-detect-port bbtk-adjust-thresholds \
         bbtk-get-thresholds bbtk-set-thresholds bbtk-set-smoothing \
-        get-serial-port-list ibbtk
+        get-serial-port-list ibbtk events-stats
 
 GIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS := -ldflags "\
