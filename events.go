@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 
 	//"os"
@@ -242,6 +243,13 @@ func CaptureEventsFromDSCEvents(rawEvents []DSCEvent) ([]Event, error) {
 	return allEvents, nil
 }
 
+// SortEventsByDuration sorts a slice of Event in ascending order of Duration.
+func SortEventsByDuration(events []Event) {
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].Duration < events[j].Duration
+	})
+}
+
 // SaveEventsToCSV saves detected events to a CSV file
 func SaveEventsToCSV(events []Event, filename string) error {
 	file, err := os.Create(filename)
@@ -252,6 +260,10 @@ func SaveEventsToCSV(events []Event, filename string) error {
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
+
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].Onset < events[j].Onset
+	})
 
 	// Write header
 	if err := writer.Write([]string{"Type", "Onset", "Duration"}); err != nil {
