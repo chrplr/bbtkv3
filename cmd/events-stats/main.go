@@ -99,7 +99,7 @@ func printTable(
 			header = append(header, fmt.Sprintf("P%d", p))
 		}
 	}
-	header = append(header, "Range", "P99.5-P0.5", "SD")
+	header = append(header, "Range", "P99.5-P0.5", "P95-P05", "SD")
 	fmt.Fprintln(w, strings.Join(header, "\t"))
 
 	// Separator
@@ -123,9 +123,11 @@ func printTable(
 		}
 		rng := vals[len(vals)-1] - vals[0]
 		spread := percentile(vals, 99.5) - percentile(vals, 0.5)
+		iqr := percentile(vals, 95) - percentile(vals, 5)
 		cols = append(cols,
 			fmt.Sprintf("%.3f", rng),
 			fmt.Sprintf("%.3f", spread),
+			fmt.Sprintf("%.3f", iqr),
 			fmt.Sprintf("%.3f", stddev(vals)),
 		)
 		fmt.Fprintln(w, strings.Join(cols, "\t"))
