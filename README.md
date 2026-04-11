@@ -9,6 +9,7 @@ This page describes a set of command-line tools that streamline the testing of t
 * `bbtk-adjust-thresholds` which opens the "sensor menu" on the BBTK
 * `bbtk-set-thresholds` which sets the values of the various thresholds
 * `bbtk-capture` which launches the capture of events and exports them to `.csv` files
+* `bbtk-send-command` which sends raw commands from stdin to the BBTK and prints its responses to stdout
 * `ibbtk` an interactive shell that keeps a persistent connection and exposes all of the above through a nested menu interface
 
 
@@ -171,7 +172,8 @@ Once connected, `ibbtk` presents a prompt. Type `menu` at any prompt to list ava
 | `capture` | Enter the capture sub-menu |
 | `flush` | Flush the serial output buffer |
 | `reset` | Reset serial input/output buffers |
-| `raw <CMD>` | Send a raw protocol command and print one response line |
+| `raw <CMD>` | Send a raw protocol command and print all response lines (stops after 1 s of silence) |
+| `reconnect` | Purge serial buffers and re-issue `CONN` — use this to recover after a bad command desynchronises the dialog |
 
 ### `thresholds` sub-menu
 
@@ -222,6 +224,34 @@ Exiting...
 ibbtk> exit
 Exiting...
 ```
+
+# bbtk-send-command — pipe raw commands to the device
+
+`bbtk-send-command` reads commands from stdin (one per line), sends each to the BBTK as a raw protocol command, and prints the device's responses to stdout. No handshake is performed automatically, so you have full control over the command sequence.
+
+```
+Options:
+  -p string   serial port (or set BBTK_PORT)
+  -b int      baudrate (default 115200)
+  -timeout int  seconds of silence after last response line before moving to
+                the next command (default 1)
+  -V          display version and exit
+```
+
+## Examples
+
+```bash
+# Check that the device echoes back
+echo "ECHO" | bbtk-send-command -p /dev/ttyUSB0
+
+# Full handshake then query firmware version
+printf "CONN\nFIRM\n" | bbtk-send-command -p /dev/ttyUSB0
+
+# Use the BBTK_PORT environment variable
+printf "CONN\nECHO\n" | BBTK_PORT=/dev/ttyUSB0 bbtk-send-command -timeout 2
+```
+
+After sending each command the tool waits up to `-timeout` seconds for the device to stop replying before sending the next command. Increase `-timeout` for commands that trigger longer device operations.
 
 # Troubleshooting
 

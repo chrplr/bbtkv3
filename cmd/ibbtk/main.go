@@ -327,7 +327,7 @@ func main() {
 		},
 		{
 			Command:     "raw",
-			Description: "Send a raw command and read one response line: raw <CMD>",
+			Description: "Send a raw command and print all response lines (1 s silence = done): raw <CMD>",
 			Function: func(args ...string) error {
 				if len(args) == 0 {
 					fmt.Println("usage: raw <CMD>")
@@ -338,12 +338,33 @@ func main() {
 					fmt.Printf("send error: %v\n", err)
 					return nil
 				}
-				resp, err := b.ReadLine()
-				if err != nil {
-					fmt.Printf("read error: %v\n", err)
+				// Drain all response lines until 1 second of silence.
+				for {
+					resp, err := b.ReadLine()
+					if err != nil {
+						break
+					}
+					fmt.Printf("< %s\n", resp)
+				}
+				return nil
+			},
+		},
+		{
+			Command:     "reconnect",
+			Description: "Purge serial buffers and re-establish CONN (use after a bad command desynchronises the dialog)",
+			Function: func(args ...string) error {
+				fmt.Print("Resetting serial buffers... ")
+				if err := b.ResetSerialBuffers(); err != nil {
+					fmt.Printf("error: %v\n", err)
+				} else {
+					fmt.Println("ok")
+				}
+				fmt.Print("Reconnecting (CONN)... ")
+				if err := b.Connect(); err != nil {
+					fmt.Printf("error: %v\n", err)
 					return nil
 				}
-				fmt.Printf("< %s\n", resp)
+				fmt.Println("ok")
 				return nil
 			},
 		},
