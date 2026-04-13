@@ -299,7 +299,7 @@ Each of the three sections contains a table with the following columns:
 Below each table, a 10-bin ASCII histogram is printed for every event type. If outliers were removed, a warning line of the form
 
 ```
-Warning: N outliers detected in TYPE (> D.DDD ms away from the median)
+Warning: N outliers detected in TYPE (> D.DDD ms away from the median): V1, V2, ...
 ```
 
 is printed between the table and the histograms.
@@ -315,7 +315,7 @@ Type    N   Min     P10     ...  Max     Range  P99.5-P0.5  P95-P05  SD
 ------  --  ------  ------  ...  ------  -----  ----------  -------  -----
 TTLin1  50   1.000   1.000  ...   1.250  0.250       0.240    0.200  0.050
 Opto1   49  513.250 513.650 ...  514.500 1.250       1.160    0.750  0.240
-Warning: 1 outliers detected in Opto1 (> 10.000 ms away from the median)
+Warning: 1 outliers detected in Opto1 (> 10.000 ms away from the median): -39547.750
 
   Opto1:
   histogram (10 bins):

@@ -105,6 +105,7 @@ type outlierWarning struct {
 	typ     string
 	n       int
 	maxDist float64
+	vals    []float64
 }
 
 // printTable writes a percentile table to stdout, followed by outlier warnings
@@ -155,9 +156,9 @@ func printTable(
 		}
 		sort.Float64s(vals)
 
-		filtered, nOut := filterOutliers(vals, outlierK)
-		if nOut > 0 {
-			warnings = append(warnings, outlierWarning{typ, nOut, outlierK})
+		filtered, outliers := filterOutliers(vals, outlierK)
+		if len(outliers) > 0 {
+			warnings = append(warnings, outlierWarning{typ, len(outliers), outlierK, outliers})
 		}
 		vals = filtered
 		valsByType[typ] = vals
@@ -180,8 +181,12 @@ func printTable(
 	w.Flush()
 
 	for _, warn := range warnings {
-		fmt.Printf("Warning: %d outliers detected in %s (> %.3f ms away from the median)\n",
-			warn.n, warn.typ, warn.maxDist)
+		strs := make([]string, len(warn.vals))
+		for i, v := range warn.vals {
+			strs[i] = fmt.Sprintf("%.3f", v)
+		}
+		fmt.Printf("Warning: %d outliers detected in %s (> %.3f ms away from the median): %s\n",
+			warn.n, warn.typ, warn.maxDist, strings.Join(strs, ", "))
 	}
 
 	if withHistogram {
@@ -253,21 +258,21 @@ func stddev(vals []float64) float64 {
 }
 
 // filterOutliers removes values more than maxDist ms away from the median.
-// vals must be pre-sorted. Returns the filtered slice and the count of removed
-// values. When maxDist≤0, no filtering is applied.
-func filterOutliers(sorted []float64, maxDist float64) ([]float64, int) {
+// vals must be pre-sorted. Returns the filtered slice and the removed values.
+// When maxDist≤0, no filtering is applied.
+func filterOutliers(sorted []float64, maxDist float64) (filtered, outliers []float64) {
 	if maxDist <= 0 {
-		return sorted, 0
+		return sorted, nil
 	}
 	median := percentile(sorted, 50)
-
-	filtered := sorted[:0:0] // reuse backing array type but start empty
 	for _, v := range sorted {
 		if math.Abs(v-median) <= maxDist {
 			filtered = append(filtered, v)
+		} else {
+			outliers = append(outliers, v)
 		}
 	}
-	return filtered, len(sorted) - len(filtered)
+	return filtered, outliers
 }
 
 // pairDiffs returns onset differences (event2.Onset − event1.Onset) for each
