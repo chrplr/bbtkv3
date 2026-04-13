@@ -3,14 +3,17 @@
 // For each event type found in the input files it reports:
 //   - percentiles 0 % (min), 10 %, 20 %, … 90 %, 100 % (max) of Duration
 //   - the same percentiles of the inter-onset intervals (jitter) within each type
+//   - the same percentiles of onset differences between temporally paired events
+//     (event2.Onset − event1.Onset for the nearest following event2 after each event1)
 //
 // Usage:
 //
-//	events-stats file1.events.csv [file2.events.csv ...]
+//	events-stats [-event1 TYPE] [-event2 TYPE] file1.events.csv [file2.events.csv ...]
 package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"io"
 	"math"
@@ -28,16 +31,26 @@ type row struct {
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <file.events.csv> [file2.events.csv ...]\n", os.Args[0])
+	event1 := flag.String("event1", "TTLin1", "first event type for paired-difference analysis")
+	event2 := flag.String("event2", "Opto1", "second event type for paired-difference analysis (difference = event2 − event1)")
+	outlierK := flag.Float64("detect-outliers", 0, "exclude values more than this many ms away from the median (set to 0 to disable)")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [-event1 TYPE] [-event2 TYPE] [-detect-outliers MS] <file.events.csv> [file2.events.csv ...]\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	if flag.NArg() < 1 {
+		flag.Usage()
 		os.Exit(1)
 	}
 
-	// Collect all rows, grouped by type.
+	// Collect all rows, grouped by type, and also in a flat slice for pairing.
 	byType := map[string][]row{}
 	typeOrder := []string{} // preserve first-seen order
+	var allRows []row
 
-	for _, path := range os.Args[1:] {
+	for _, path := range flag.Args() {
 		rows, err := readCSV(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error reading %s: %v\n", path, err)
@@ -49,6 +62,7 @@ func main() {
 			}
 			byType[r.typ] = append(byType[r.typ], r)
 		}
+		allRows = append(allRows, rows...)
 	}
 
 	if len(byType) == 0 {
@@ -67,24 +81,44 @@ func main() {
 			vals[i] = r.duration
 		}
 		return vals
-	}, false)
+	}, false, true, *outlierK)
 
 	// ── Jitter (inter-onset interval) statistics ───────────────────────────
 	fmt.Println()
 	fmt.Println("=== Inter-Onset Interval / Jitter Statistics (ms) ===")
 	fmt.Println()
-	printTable(typeOrder, byType, pcts, jitterValues, true)
+	printTable(typeOrder, byType, pcts, jitterValues, true, true, *outlierK)
+
+	// ── Paired-event onset difference statistics ───────────────────────────
+	diffs := pairDiffs(allRows, *event1, *event2)
+	fmt.Println()
+	fmt.Printf("=== Paired-Event Onset Differences: %s → %s (ms) ===\n", *event1, *event2)
+	fmt.Println()
+	if len(diffs) == 0 {
+		fmt.Printf("  (no pairs found — check that both %q and %q events exist in the input)\n", *event1, *event2)
+	} else {
+		printSingleRow(fmt.Sprintf("%s→%s", *event1, *event2), diffs, pcts, *outlierK)
+	}
 }
 
-// printTable writes a percentile table to stdout.
+type outlierWarning struct {
+	typ     string
+	n       int
+	maxDist float64
+}
+
+// printTable writes a percentile table to stdout, followed by outlier warnings
+// and per-type histograms. outlierK is the maximum distance from the median in
+// ms; values beyond it are excluded (0 = off).
 // valuesFn extracts the sample values for a single type's rows.
-// isJitter controls whether the N column shows n-1 (diffs) instead of n.
 func printTable(
 	typeOrder []string,
 	byType map[string][]row,
 	pcts []int,
 	valuesFn func([]row) []float64,
 	isJitter bool,
+	withHistogram bool,
+	outlierK float64,
 ) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
@@ -109,6 +143,10 @@ func printTable(
 	}
 	fmt.Fprintln(w, strings.Join(seps, "\t"))
 
+	// Collect (filtered) sorted values per type for warnings and histograms.
+	valsByType := make(map[string][]float64, len(typeOrder))
+	var warnings []outlierWarning
+
 	for _, typ := range typeOrder {
 		rows := byType[typ]
 		vals := valuesFn(rows)
@@ -116,6 +154,13 @@ func printTable(
 			continue
 		}
 		sort.Float64s(vals)
+
+		filtered, nOut := filterOutliers(vals, outlierK)
+		if nOut > 0 {
+			warnings = append(warnings, outlierWarning{typ, nOut, outlierK})
+		}
+		vals = filtered
+		valsByType[typ] = vals
 
 		cols := []string{typ, strconv.Itoa(len(vals))}
 		for _, p := range pcts {
@@ -133,6 +178,22 @@ func printTable(
 		fmt.Fprintln(w, strings.Join(cols, "\t"))
 	}
 	w.Flush()
+
+	for _, warn := range warnings {
+		fmt.Printf("Warning: %d outliers detected in %s (> %.3f ms away from the median)\n",
+			warn.n, warn.typ, warn.maxDist)
+	}
+
+	if withHistogram {
+		for _, typ := range typeOrder {
+			vals := valsByType[typ]
+			if len(vals) == 0 {
+				continue
+			}
+			fmt.Printf("\n  %s:\n", typ)
+			printHistogram(vals)
+		}
+	}
 }
 
 // jitterValues returns the successive differences of Onset values for a type,
@@ -189,6 +250,117 @@ func stddev(vals []float64) float64 {
 		sq += d * d
 	}
 	return math.Sqrt(sq / float64(n-1))
+}
+
+// filterOutliers removes values more than maxDist ms away from the median.
+// vals must be pre-sorted. Returns the filtered slice and the count of removed
+// values. When maxDist≤0, no filtering is applied.
+func filterOutliers(sorted []float64, maxDist float64) ([]float64, int) {
+	if maxDist <= 0 {
+		return sorted, 0
+	}
+	median := percentile(sorted, 50)
+
+	filtered := sorted[:0:0] // reuse backing array type but start empty
+	for _, v := range sorted {
+		if math.Abs(v-median) <= maxDist {
+			filtered = append(filtered, v)
+		}
+	}
+	return filtered, len(sorted) - len(filtered)
+}
+
+// pairDiffs returns onset differences (event2.Onset − event1.Onset) for each
+// event1, paired with the nearest following event2 (by Onset). If multiple
+// event1s fall before the same event2, each gets paired independently.
+func pairDiffs(allRows []row, typ1, typ2 string) []float64 {
+	var onsets1, onsets2 []float64
+	for _, r := range allRows {
+		switch r.typ {
+		case typ1:
+			onsets1 = append(onsets1, r.onset)
+		case typ2:
+			onsets2 = append(onsets2, r.onset)
+		}
+	}
+	if len(onsets1) == 0 || len(onsets2) == 0 {
+		return nil
+	}
+	sort.Float64s(onsets1)
+	sort.Float64s(onsets2)
+
+	var diffs []float64
+	for _, t1 := range onsets1 {
+		// Binary search for the first event2 onset >= t1.
+		idx := sort.SearchFloat64s(onsets2, t1)
+		if idx >= len(onsets2) {
+			continue // no following event2
+		}
+		diffs = append(diffs, onsets2[idx]-t1)
+	}
+	return diffs
+}
+
+// printSingleRow writes a single-row percentile table for the given label and
+// values, followed by outlier warnings and a histogram.
+func printSingleRow(label string, vals []float64, pcts []int, outlierK float64) {
+	fakeByType := map[string][]row{label: {}}
+	precomputed := make([]float64, len(vals))
+	copy(precomputed, vals)
+	printTable([]string{label}, fakeByType, pcts, func(_ []row) []float64 {
+		return precomputed
+	}, false, true, outlierK)
+}
+
+// printHistogram prints a 10-bin ASCII histogram of vals to stdout.
+// Copied from github.com/chrplr/goxpyriment/tests/internal/timingstats.
+func printHistogram(vals []float64) {
+	const nBins = 10
+	const barWidth = 40
+	n := len(vals)
+	if n == 0 {
+		return
+	}
+	mn, mx := vals[0], vals[0]
+	for _, v := range vals {
+		if v < mn {
+			mn = v
+		}
+		if v > mx {
+			mx = v
+		}
+	}
+	binW := (mx - mn) / nBins
+	if binW == 0 {
+		binW = 1
+	}
+	counts := make([]int, nBins)
+	for _, v := range vals {
+		b := int((v - mn) / binW)
+		if b >= nBins {
+			b = nBins - 1
+		}
+		counts[b]++
+	}
+	maxCount := 0
+	for _, c := range counts {
+		if c > maxCount {
+			maxCount = c
+		}
+	}
+	fmt.Printf("  histogram (%d bins):\n", nBins)
+	for i := 0; i < nBins; i++ {
+		lo := mn + float64(i)*binW
+		hi := lo + binW
+		bar := ""
+		if maxCount > 0 {
+			stars := counts[i] * barWidth / maxCount
+			for j := 0; j < stars; j++ {
+				bar += "*"
+			}
+		}
+		fmt.Printf("  [%8.3f, %8.3f) ms : %5d  %s\n", lo, hi, counts[i], bar)
+	}
 }
 
 // readCSV reads a single events CSV file and returns its rows.

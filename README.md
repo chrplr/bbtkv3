@@ -11,6 +11,7 @@ This page describes a set of command-line tools that streamline the testing of t
 * `bbtk-capture` which launches the capture of events and exports them to `.csv` files
 * `bbtk-send-command` which sends raw commands from stdin to the BBTK and prints its responses to stdout
 * `ibbtk` an interactive shell that keeps a persistent connection and exposes all of the above through a nested menu interface
+* `events-stats` which computes descriptive statistics and histograms from the `.events.csv` files produced by `bbtk-capture`
 
 
 Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
@@ -190,6 +191,8 @@ Once connected, `ibbtk` presents a prompt. Type `menu` at any prompt to list ava
 | `set <mask>` | Set the smoothing mask, e.g. `set 1;1;0;0;1;1` (fields: Mic1;Mic2;Opto4;Opto3;Opto2;Opto1) |
 | `default` | Enable smoothing on all sensors |
 
+Beware: When smoothing is on for a given input line, one must subtract 20ms to durations reported by the bbtk for this input line.
+
 ### `capture` sub-menu
 
 | Command | Description |
@@ -252,6 +255,112 @@ printf "CONN\nECHO\n" | BBTK_PORT=/dev/ttyUSB0 bbtk-send-command -timeout 2
 ```
 
 After sending each command the tool waits up to `-timeout` seconds for the device to stop replying before sending the next command. Increase `-timeout` for commands that trigger longer device operations.
+
+# events-stats — descriptive statistics on captured events
+
+`events-stats` reads one or more `.events.csv` files produced by `bbtk-capture` and prints three blocks of statistics, each followed by an ASCII histogram:
+
+1. **Duration statistics** — distribution of event durations for each sensor channel.
+2. **Inter-onset interval (jitter) statistics** — distribution of the time between successive events of the same type. This measures the regularity (jitter) of the stimulus presentation.
+3. **Paired-event onset differences** — for each occurrence of a reference event (default: `TTLin1`), the tool finds the nearest following event of a second type (default: `Opto1`) and reports the distribution of those onset differences. This is the main measure of audio-visual latency: it tells you how long after a TTL trigger the corresponding visual or audio event was actually detected by the sensor.
+
+All time values are in milliseconds.
+
+## Usage
+
+```
+events-stats [-event1 TYPE] [-event2 TYPE] [-detect-outliers K] file1.events.csv [file2.events.csv ...]
+```
+
+Multiple files are pooled together before computing statistics, which is useful when you have repeated capture sessions.
+
+## Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-event1 TYPE` | `TTLin1` | Reference event type for the paired-difference analysis |
+| `-event2 TYPE` | `Opto1` | Target event type for the paired-difference analysis (difference = `event2.Onset − event1.Onset`) |
+| `-detect-outliers MS` | `0` | Exclude data points more than MS milliseconds away from the median. A warning line is printed for each type where outliers are removed. Set to `0` (the default) to disable outlier filtering. |
+
+## Output format
+
+Each of the three sections contains a table with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| `Type` | Event type (sensor channel name) |
+| `N` | Number of data points (after outlier removal) |
+| `Min` / `P10` … `P90` / `Max` | Percentiles 0 %, 10 %, … 100 % |
+| `Range` | Max − Min |
+| `P99.5-P0.5` | Near-full spread (robust range) |
+| `P95-P05` | 90 % central interval |
+| `SD` | Sample standard deviation (Bessel-corrected) |
+
+Below each table, a 10-bin ASCII histogram is printed for every event type. If outliers were removed, a warning line of the form
+
+```
+Warning: N outliers detected in TYPE (> D.DDD ms away from the median)
+```
+
+is printed between the table and the histograms.
+
+## Example
+
+```
+$ events-stats -event1 TTLin1 -event2 Opto1 -detect-outliers 10 bbtk-capture-001.events.csv
+
+=== Duration Statistics (ms) ===
+
+Type    N   Min     P10     ...  Max     Range  P99.5-P0.5  P95-P05  SD
+------  --  ------  ------  ...  ------  -----  ----------  -------  -----
+TTLin1  50   1.000   1.000  ...   1.250  0.250       0.240    0.200  0.050
+Opto1   49  513.250 513.650 ...  514.500 1.250       1.160    0.750  0.240
+Warning: 1 outliers detected in Opto1 (> 10.000 ms away from the median)
+
+  Opto1:
+  histogram (10 bins):
+  [ 513.250,  513.375) ms :     1  **
+  [ 513.375,  513.500) ms :     0
+  ...
+
+=== Inter-Onset Interval / Jitter Statistics (ms) ===
+
+...
+
+=== Paired-Event Onset Differences: TTLin1 → Opto1 (ms) ===
+
+Type           N   Min    P10    P50    P90    Max    Range  SD
+-------------  --  -----  -----  -----  -----  -----  -----  -----
+TTLin1→Opto1   50  12.50  12.80  13.20  13.90  14.10   1.60  0.420
+
+  TTLin1→Opto1:
+  histogram (10 bins):
+  [  12.500,  12.660) ms :    3  ****
+  ...
+```
+
+## Pairing algorithm
+
+For each `event1` occurrence (sorted by onset time), `events-stats` locates the **nearest following** `event2` onset using binary search. Multiple `event1` events can pair with the same `event2` (non-exclusive), which handles edge cases where two triggers fire in rapid succession before the sensor responds.
+
+## Typical workflow
+
+```bash
+# 1. Record events
+bbtk-capture -p /dev/ttyUSB0 -d 60 -o session1.dat
+
+# 2. Inspect statistics, excluding events more than 10 ms from the median
+events-stats -detect-outliers 10 session1.events.csv
+
+# 3. Check TTL-to-audio latency instead
+events-stats -event1 TTLin1 -event2 Mic1 -detect-outliers 10 session1.events.csv
+
+# 4. Disable outlier filtering to see raw data
+events-stats session1.events.csv
+
+# 5. Pool several sessions
+events-stats session1.events.csv session2.events.csv session3.events.csv
+```
 
 # Troubleshooting
 
@@ -327,3 +436,8 @@ export ARCHITECTURES=amd64
 AUTHOR: christophe@pallier.org
 
 LICENSE: GPL-3.0
+
+REFERENCES:
+
+* Plant, R., Hammond, N., & Turner, G. (2004). Self-validating presentation and response timing in cognitive paradigms: How and why? Behavior Research Methods, Instruments, & Computers : A Journal of the Psychonomic Society, Inc, 36, 291–303. https://doi.org/10.3758/BF03195575
+* Plant, R. (2016). The Black Box Toolkit v2. API Guide. Revision RC4.
