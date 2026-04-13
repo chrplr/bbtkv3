@@ -10,6 +10,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -254,6 +255,52 @@ func main() {
 		return nil
 	}
 
+	// ── streamUntilBreak ─────────────────────────────────────────────────────
+	// Sends cmd to the device, prints every line the device returns, and stops
+	// when the user types "X" (+ Enter). It then sends the break character 'X'
+	// to the device to interrupt the ongoing operation.
+
+	streamUntilBreak := func(cmd string) {
+		if err := b.SendCommand(cmd); err != nil {
+			fmt.Printf("send error: %v\n", err)
+			return
+		}
+
+		done := make(chan struct{})
+
+		// Goroutine: continuously read and print device lines.
+		// ReadLine has a 1-second port timeout, so this goroutine will unblock
+		// and notice 'done' within 1 second of it being closed.
+		go func() {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				line, err := b.ReadLine()
+				if err != nil {
+					continue // timeout or transient error — keep polling
+				}
+				fmt.Println(line)
+			}
+		}()
+
+		fmt.Println("(type X + Enter to stop)")
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			if strings.EqualFold(strings.TrimSpace(scanner.Text()), "x") {
+				break
+			}
+		}
+
+		close(done)
+		if err := b.SendBreakChar(); err != nil {
+			fmt.Printf("sendbreak error: %v\n", err)
+		}
+		fmt.Println("Stopped.")
+	}
+
 	// ── Main menu ────────────────────────────────────────────────────────────
 
 	mainCmds := []menu.CommandOption{
@@ -365,6 +412,34 @@ func main() {
 					return nil
 				}
 				fmt.Println("ok")
+				return nil
+			},
+		},
+		{
+			Command:     "sendbreak",
+			Description: "Send the break character 'X' to the device (interrupts ongoing operations)",
+			Function: func(args ...string) error {
+				if err := b.SendBreakChar(); err != nil {
+					fmt.Printf("sendbreak error: %v\n", err)
+					return nil
+				}
+				fmt.Println("Break sent.")
+				return nil
+			},
+		},
+		{
+			Command:     "inputcheck",
+			Description: "Send ICHK and stream device output (type X + Enter to stop)",
+			Function: func(args ...string) error {
+				streamUntilBreak("ICHK")
+				return nil
+			},
+		},
+		{
+			Command:     "outputcheck",
+			Description: "Send OCHK and stream device output (type X + Enter to stop)",
+			Function: func(args ...string) error {
+				streamUntilBreak("OCHK")
 				return nil
 			},
 		},

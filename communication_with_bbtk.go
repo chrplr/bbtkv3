@@ -129,6 +129,17 @@ func (b *bbtkv3) SendBreak() {
 	time.Sleep(time.Second)
 }
 
+// SendBreakChar sends the ASCII character 'X' to the BBTK without any suffix.
+// This is the BBTKv3 mechanism for interrupting ongoing device operations such
+// as ICHK or OCHK.
+func (b *bbtkv3) SendBreakChar() error {
+	if DEBUG {
+		log.Println("SendBreakChar: sending 'X'")
+	}
+	_, err := b.port.Write([]byte("X"))
+	return err
+}
+
 // ResetSerialBuffers purges the input and output buffers of the serial port.
 func (b *bbtkv3) ResetSerialBuffers() error {
 	if err := b.port.ResetInputBuffer(); err != nil {

@@ -1,5 +1,5 @@
-Automated capture of events with a Black Box ToolKit(tm) 
-========================================================
+Command-line interface for the Black Box ToolKit v3
+===================================================
 
 The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
  generating sounds or TTL signals.
