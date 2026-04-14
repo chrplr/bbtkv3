@@ -31,6 +31,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -153,6 +154,10 @@ func main() {
 	time.Sleep(1 * time.Second)
 	fmt.Printf("Capturing events (with DSCM) for %v seconds... ", *durationPtr)
 	data, err := b.CaptureEvents(*durationPtr)
+	if errors.Is(err, bbtkv3.ErrCaptureAborted) {
+		fmt.Println("Capture aborted.")
+		os.Exit(0)
+	}
 	if err != nil {
 		log.Fatalf("CaptureEvents: %v\n", err)
 	}

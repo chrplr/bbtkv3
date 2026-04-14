@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/chrplr/bbtkv3"
 	"github.com/turret-io/go-menu/menu"
@@ -267,11 +268,14 @@ func main() {
 		}
 
 		done := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(1)
 
 		// Goroutine: continuously read and print device lines.
-		// ReadLine has a 1-second port timeout, so this goroutine will unblock
-		// and notice 'done' within 1 second of it being closed.
+		// ReadLine has a 1-second port timeout, so once 'done' is closed the
+		// goroutine exits within at most one timeout cycle.
 		go func() {
+			defer wg.Done()
 			for {
 				select {
 				case <-done:
@@ -294,10 +298,17 @@ func main() {
 			}
 		}
 
-		close(done)
+		// Send the break first so the device stops streaming; this lets the
+		// goroutine's next ReadLine return quickly instead of waiting a full
+		// timeout cycle.  Then close done and wait for the goroutine to exit
+		// before returning — otherwise a second call to streamUntilBreak would
+		// start a new goroutine that races on b.reader with the old one,
+		// corrupting the bufio.Reader and causing a slice-bounds panic.
 		if err := b.SendBreakChar(); err != nil {
 			fmt.Printf("sendbreak error: %v\n", err)
 		}
+		close(done)
+		wg.Wait()
 		fmt.Println("Stopped.")
 	}
 

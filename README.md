@@ -6,12 +6,20 @@ The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a devic
 
 This page describes a set of command-line tools that streamline the testing of time-critical psychology experiments:
 
-* `bbtk-adjust-thresholds` which opens the "sensor menu" on the BBTK
-* `bbtk-set-thresholds` which sets the values of the various thresholds
-* `bbtk-capture` which launches the capture of events and exports them to `.csv` files
-* `bbtk-send-command` which sends raw commands from stdin to the BBTK and prints its responses to stdout
-* `ibbtk` an interactive shell that keeps a persistent connection and exposes all of the above through a nested menu interface
-* `events-stats` which computes descriptive statistics and histograms from the `.events.csv` files produced by `bbtk-capture`
+| Tool | Description |
+|------|-------------|
+| `bbtk-detect-port` | Scans serial ports to locate the connected BBTK |
+| `bbtk-capture` | Captures events for a given duration and exports them to `.dat`, `.dscevents.csv`, and `.events.csv` files |
+| `bbtk-input-check` | Streams live input state from the device (ICHK); press `x` to stop |
+| `bbtk-event-marking` | Configures and runs the command-event marking program on the device; press `x` to stop |
+| `bbtk-adjust-thresholds` | Opens the interactive sensor threshold adjustment menu on the device |
+| `bbtk-get-thresholds` | Reads and prints the current sensor thresholds |
+| `bbtk-set-thresholds` | Writes eight threshold values to the device |
+| `bbtk-set-smoothing` | Configures sensor smoothing |
+| `bbtk-send-command` | Reads raw protocol commands from stdin, sends each to the BBTK, and prints responses to stdout |
+| `get-serial-port-list` | Lists all available serial ports on the host machine |
+| `ibbtk` | Interactive menu-driven shell — keeps a persistent connection and exposes all of the above in a nested menu |
+| `events-stats` | Computes descriptive statistics and ASCII histograms from the `.events.csv` files produced by `bbtk-capture` |
 
 
 Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
@@ -73,6 +81,8 @@ Usage of bbtk-capture:
   -p string
     	device (serial port name) (default "/dev/ttyUSB0")
 ```
+
+During the countdown, press `x` (no Enter needed) to abort the capture early. The program sends a stop command to the device and exits cleanly.
 
 
 
@@ -171,10 +181,13 @@ Once connected, `ibbtk` presents a prompt. Type `menu` at any prompt to list ava
 | `thresholds` | Enter the thresholds sub-menu |
 | `smoothing` | Enter the smoothing sub-menu |
 | `capture` | Enter the capture sub-menu |
+| `inputcheck` | Send `ICHK` and stream input-state lines (type `X` + Enter to stop) |
+| `outputcheck` | Send `OCHK` and stream output-state lines (type `X` + Enter to stop) |
 | `flush` | Flush the serial output buffer |
 | `reset` | Reset serial input/output buffers |
 | `raw <CMD>` | Send a raw protocol command and print all response lines (stops after 1 s of silence) |
 | `reconnect` | Purge serial buffers and re-issue `CONN` — use this to recover after a bad command desynchronises the dialog |
+| `sendbreak` | Send the break character `X` to the device (interrupts ongoing operations) |
 
 ### `thresholds` sub-menu
 
@@ -226,6 +239,45 @@ capture> exit
 Exiting...
 ibbtk> exit
 Exiting...
+```
+
+# bbtk-input-check — stream live input state
+
+`bbtk-input-check` sends the `ICHK` command to the device and continuously prints every line returned, showing the state of the 12 input lines (Keypad1–4, Opto1–4, TTLin1–2, Mic1–2) in real time. Press `x` (no Enter needed) to stop; the program sends the break character `X` to the device and exits.
+
+```
+Options:
+  -p string   serial port (or set BBTK_PORT)
+  -b int      baudrate (default 115200)
+  -V          display version and exit
+```
+
+## Example
+
+```bash
+$ bbtk-input-check -p /dev/ttyUSB0
+Streaming input state. Press 'x' to stop.
+000000000000;
+000000010000;
+000000000000;
+000000010000;
+x
+Stopping...
+```
+
+Each line is a 12-bit snapshot of the input ports, terminated with `;`. A `1` in a position means that sensor is currently active.
+
+# bbtk-event-marking — run the command-event marking program
+
+`bbtk-event-marking` programs the BBTK to operate in event-marking mode: it sends the `PDCE / STYP / PATT / TIML` setup sequence together with the pattern table, commits with `PCCR`, and starts execution with `RUEM`. The device then runs indefinitely, marking command events as they occur. Press `x` (no Enter needed) to stop; the program sends `X` to the device and exits.
+
+A one-second pause is inserted before each protocol command (matching the timing used by `bbtk-capture`) to give the device time to process each step.
+
+```
+Options:
+  -p string   serial port (or set BBTK_PORT)
+  -b int      baudrate (default 115200)
+  -V          display version and exit
 ```
 
 # bbtk-send-command — pipe raw commands to the device

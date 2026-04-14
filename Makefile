@@ -5,7 +5,7 @@ DIST_DIR  := binaries
 CMDS := bbtk-capture bbtk-detect-port bbtk-adjust-thresholds \
         bbtk-get-thresholds bbtk-set-thresholds bbtk-set-smoothing \
         get-serial-port-list ibbtk events-stats bbtk-send-command \
-        bbtk-event-marking
+        bbtk-event-marking bbtk-input-check
 
 PLATFORMS ?= darwin linux windows
 ARCHS     ?= amd64 arm64

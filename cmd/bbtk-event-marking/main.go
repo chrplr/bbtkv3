@@ -2,7 +2,7 @@
 //
 // Sends the PDCE / STYP / PATT / TIML sequence to the device followed by
 // the pattern rows and PCCR / RUEM to commit and run the event-marking
-// program. It then waits for the user to press Enter and sends 'X' to the
+// program. It then waits for the user to press 'x' and sends 'X' to the
 // device to stop it.
 //
 // Usage:
@@ -11,7 +11,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -54,36 +53,7 @@ func main() {
 		log.Fatalf("connect: %v", err)
 	}
 
-	commands := []string{
-		"PDCE",
-		"STYP",
-		"PATT",
-		"TIML",
-		"0",
-		"00000001000000000000,0000010000000000",
-		"00000000000100000000,0000100000000000",
-		"99999999999999999999,9999999999999999",
-		"99999999999999999999,9999999999999999",
-		"99999999999999999999,9999999999999999",
-		"99999999999999999999,9999999999999999",
-		"99999999999999999999,9999999999999999",
-		"99999999999999999999,9999999999999999",
-		"PCCR",
-		"RUEM",
+	if err := b.EventMarking(bbtkv3.DefaultEventMarkingPattern); err != nil {
+		log.Fatalf("event marking: %v", err)
 	}
-
-	for _, cmd := range commands {
-		fmt.Printf("> %s\n", cmd)
-		if err := b.SendCommand(cmd); err != nil {
-			log.Fatalf("send %q: %v", cmd, err)
-		}
-	}
-
-	fmt.Println("Event marking running. Press Enter to stop.")
-	bufio.NewReader(os.Stdin).ReadString('\n')
-
-	if err := b.SendBreakChar(); err != nil {
-		log.Fatalf("sendbreak: %v", err)
-	}
-	fmt.Println("Stopped.")
 }

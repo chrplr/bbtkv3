@@ -6,6 +6,7 @@ package bbtkv3
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"go.bug.st/serial"
+	"golang.org/x/term"
 )
 
 // Variables to be passed on the compilation command line with "-X main.Version=${VERSION} -X main.Build=${BUILD}"
@@ -386,6 +388,23 @@ func (b *bbtkv3) DisplayInfoOnBBTK() {
 	time.Sleep(1. * time.Second)
 }
 
+// DefaultEventMarkingPattern is the default 8-row PATT payload used by EventMarking.
+// Each row is "OOOOOOOOOOOOOOOOOOOO,IIIIIIIIIIIIIIII" (20 output bits, 16 input bits).
+// The first two rows encode the command-event stimulus; the remaining six are padding (all 9s).
+var DefaultEventMarkingPattern = [8]string{
+	"00000001000000000000,0000010000000000",
+	"00000000000100000000,0000100000000000",
+	"99999999999999999999,9999999999999999",
+	"99999999999999999999,9999999999999999",
+	"99999999999999999999,9999999999999999",
+	"99999999999999999999,9999999999999999",
+	"99999999999999999999,9999999999999999",
+	"99999999999999999999,9999999999999999",
+}
+
+// ErrCaptureAborted is returned by CaptureEvents when the user presses 'x' to abort.
+var ErrCaptureAborted = errors.New("capture aborted by user")
+
 // CaptureEvents captures events for a specified duration.
 // It sends a series of commands to the device and reads the data until the "EDAT" marker is found.
 //
@@ -432,12 +451,57 @@ func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 	}
 
 	waitingDuration := time.Duration(duration-1) * time.Second
-	// time.Sleep(waitingDuration)
+
+	abortCh := make(chan struct{}, 1)
+
+	// Put terminal in raw mode so 'x' is detected immediately without Enter.
+	// If stdin is not a terminal (e.g. piped), MakeRaw will fail and we skip
+	// keypress detection gracefully.
+	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
+		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		fmt.Print("(press 'x' to abort) ")
+		go func() {
+			buf := make([]byte, 1)
+			for {
+				n, err := os.Stdin.Read(buf)
+				if err != nil || n == 0 {
+					return
+				}
+				if buf[0] == 'x' || buf[0] == 'X' {
+					select {
+					case abortCh <- struct{}{}:
+					default:
+					}
+					return
+				}
+			}
+		}()
+	}
+
+	aborted := false
 	for i := int(waitingDuration.Seconds()); i > 0; i-- {
 		fmt.Printf("%d ", i)
-		time.Sleep(1. * time.Second)
+		select {
+		case <-abortCh:
+			aborted = true
+		case <-time.After(time.Second):
+		}
+		if aborted {
+			break
+		}
 	}
 	fmt.Println()
+
+	if aborted {
+		fmt.Println("Aborting: sending stop command to BBTK...")
+		if err := b.SendBreakChar(); err != nil {
+			log.Printf("CaptureEvents: SendBreakChar: %v", err)
+		}
+		return "", ErrCaptureAborted
+	}
+
+	fmt.Println()
+	fmt.Printf("Downloading data...")
 
 	if DEBUG {
 		fmt.Println("Waiting for data...")
@@ -460,4 +524,86 @@ func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 
 	return text, nil
 
+}
+
+// EventMarking sends the event-marking program to the BBTK and runs it until
+// the user presses 'x' (or 'X'), at which point it sends a break to the device.
+//
+// pattern must be exactly 8 rows; use DefaultEventMarkingPattern for the
+// standard command-event stimulus.  A 1-second pause is inserted before every
+// command (mirroring the timing in CaptureEvents) so the device has time to
+// process each step.
+func (b *bbtkv3) EventMarking(pattern [8]string) error {
+
+	sequence := []string{"PDCE", "STYP", "PATT", "TIML", "0"}
+	for _, row := range pattern {
+		sequence = append(sequence, row)
+	}
+	sequence = append(sequence, "PCCR")
+
+	for _, cmd := range sequence {
+		time.Sleep(time.Second)
+		if err := b.SendCommand(cmd); err != nil {
+			return fmt.Errorf("EventMarking: %q: %w", cmd, err)
+		}
+	}
+
+	// RUEM needs the same extra 500 ms that RUDS gets in CaptureEvents.
+	time.Sleep(time.Second)
+	time.Sleep(500 * time.Millisecond)
+	if err := b.SendCommand("RUEM"); err != nil {
+		return fmt.Errorf("EventMarking: RUEM: %w", err)
+	}
+
+	// Wait for the user to press 'x' / 'X'.
+	stopCh := make(chan struct{}, 1)
+
+	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
+		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		fmt.Print("Event marking running. Press 'x' to stop.")
+		go func() {
+			buf := make([]byte, 1)
+			for {
+				n, err := os.Stdin.Read(buf)
+				if err != nil || n == 0 {
+					return
+				}
+				if buf[0] == 'x' || buf[0] == 'X' {
+					select {
+					case stopCh <- struct{}{}:
+					default:
+					}
+					return
+				}
+			}
+		}()
+	} else {
+		// stdin is not a terminal (e.g. piped): fall back to waiting for Enter.
+		fmt.Println("Event marking running. Press Enter to stop.")
+		go func() {
+			buf := make([]byte, 1)
+			for {
+				n, err := os.Stdin.Read(buf)
+				if err != nil || n == 0 {
+					return
+				}
+				if buf[0] == '\n' || buf[0] == '\r' {
+					select {
+					case stopCh <- struct{}{}:
+					default:
+					}
+					return
+				}
+			}
+		}()
+	}
+
+	<-stopCh
+	fmt.Println("\nStopping event marking...")
+
+	if err := b.SendBreakChar(); err != nil {
+		return fmt.Errorf("EventMarking: SendBreakChar: %w", err)
+	}
+
+	return nil
 }
