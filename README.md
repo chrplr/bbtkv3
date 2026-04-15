@@ -28,6 +28,8 @@ The source code (under a GPL-3.0 License) at <https://github.com/chrplr/bbtkv3>
 
 This program relies on a Go module, `github.com/chrplr/bbtkv3`, which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
+Read the [paper](https://github.com/chrplr/bbtkv3/blob/main/paper/bbtkv3-paper.pdf).
+
 
 # Principle of operation
 
