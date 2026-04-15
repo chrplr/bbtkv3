@@ -51,14 +51,8 @@ Experimental psychologists require sub-millisecond accuracy in measuring stimulu
 Precise timing is a cornerstone of experimental psychology. Variations in stimulus presentation or response recording can introduce noise or even systematic biases that confound experimental results \parencite{plant2004}. While modern computers are capable of high performance, their multi-tasking operating systems and complex hardware architectures (e.g., display buffering, USB polling) often introduce unpredictable latencies.
 
 
-The Black Box ToolKit (BBTK) was developed to address these challenges by providing an external hardware reference for timing measurements. It acts as a digital oscilloscope and signal generator, capable of capturing activity on light and sound sensors, as well as TTL signals, with sub-millisecond precision.
-
-As shown in Figure~\ref{fig:operation}, the typical experimental setup involves three components:
-\begin{enumerate}
-    \item A \textbf{stimulation device} (e.g., a computer) running the experimental paradigm.
-    \item The \textbf{BBTK hardware} with input sensors (photodiodes, microphones) and TTL inputs/outputs connected to the stimulation device.
-    \item A \textbf{host computer} (which may be the same as the stimulation device with our software) driving the BBTK and recording the data.
-\end{enumerate}
+The Black Box ToolKit (BBTK) was developed to address these challenges by providing an external hardware reference for timing measurements. It acts as a digital oscilloscope and signal generator, capable of capturing activity on light and sound sensors, as well as TTL signals, with sub-millisecond precision. The typical experimental setup involves three components: a) A \textbf{stimulation device} (e.g., a computer) running the experimental paradigm;
+b) The \textbf{BBTK hardware} with input sensors (photodiodes, microphones) and TTL inputs/outputs connected to the stimulation device; c) A \textbf{host computer} (which may be the same as the stimulation device with our software) driving the BBTK and recording the data (see Figure~\ref{fig:operation}).
 
 \begin{figure*}[ht]
     \centering
