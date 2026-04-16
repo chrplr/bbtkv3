@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Pallier"
+    given-names: "Christophe"
+    affiliation: "CNRS, NeuroSpin"
+    orcid: "https://orcid.org/0000-0002-3324-666X"
+title: "bbtkv3: An Open-Source Suite for Timing Measurement and Analysis with the Black Box ToolKit v3"
+repository-code: "https://github.com/chrplr/bbtkv3"
+keywords:
+  - psychology
+  - reaction times
+  - timing accuracy
+  - stimulus presentation
+  - response times
+  - Black Box ToolKit
+  - Go
+license: "GPL-3.0"
+version: "1.0.9"
+date-released: "2026-04-16"
+

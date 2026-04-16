@@ -487,11 +487,20 @@ export ARCHITECTURES=amd64
 
 ---
 
-AUTHOR: christophe@pallier.org
+# AUTHORSHIP & LICENSE
+
+AUTHOR: Christophe Pallier <christophe@pallier.org>
 
 LICENSE: GPL-3.0
 
-REFERENCES:
+If you use this software, please cite this repository as:
+
+> Pallier, C. (2026). unipseudo-go [Computer software]. GitHub. https://github.com/chrplr/bbtkv3
+
+
+
+# REFERENCES
 
 * Plant, R., Hammond, N., & Turner, G. (2004). Self-validating presentation and response timing in cognitive paradigms: How and why? Behavior Research Methods, Instruments, & Computers : A Journal of the Psychonomic Society, Inc, 36, 291–303. https://doi.org/10.3758/BF03195575
 * Plant, R. (2016). The Black Box Toolkit v2. API Guide. Revision RC4.
+
