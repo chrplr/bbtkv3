@@ -25,17 +25,31 @@
 
 \addbibresource{references.bib}
 
-\title{\texttt{bbtkv3}: An Open-Source Suite for High-Precision Timing Measurement and Analysis with the Black Box ToolKit v3}
+\title{\texttt{bbtkv3}: An Open-Source Suite for Timing Measurement and Analysis with the Black Box ToolKit v3}
 
 \shorttitle{Software for Black Box ToolKit v3}
 
 \authorsnames{Christophe Pallier}
 \authorsaffiliations{Cognitive Neuroimaging Unit, CNRS INSERM CEA}
 
-\authornote{\addORCIDlink{Christophe Pallier}{0000-0002-3324-666X} Correspondence should be addressed to INSERM, Neurospin, Gif-sur-Yvette, F-91191, France. E-mail: christophe@pallier.org}
+\authornote{\addORCIDlink{Christophe Pallier}{0000-0002-3324-666X} Correspondence should be addressed to C. Pallier,  INSERM, Neurospin, Gif-sur-Yvette, F-91191, France. E-mail: christophe@pallier.org}
 
 \abstract{%
-Experimental psychologists require sub-millisecond accuracy in measuring stimulus presentation and participant response times. The Black Box ToolKit (BBTK) is a widely used hardware solution for such measurements. One limitation is that the software provided along the BBTK by the vendor is specific for Windows. We developped a cross-plateform suite of command line tools and a library designed to interface with the BBTK v3. These tools included serial port detection, sensor threshold adjustment and automated event capture. Additionally, it includes an interactive shell for manual device control and a statistical analysis tool that computes event durations, jitter, and latencies from captured data. Built in Go, the suite is distributed as self-contained binaries for Windows, macOS, and Linux. The source code and a library for embedding BBTK control in Go applications are available under the GPL-3.0 licence at \url{https://github.com/chrplr/bbtkv3}.%
+  Experimental psychologists require sub-millisecond accuracy in
+  measuring stimulus presentation and participant response times. The
+  Black Box ToolKit (BBTK) is a widely used hardware solution for such
+  measurements. One limitation is that the software provided along the
+  BBTK by the vendor is specific for Windows. We developped a
+  cross-plateform suite of command line tools and a library designed
+  to interface with the BBTK v3. These tools included serial port
+  detection, sensor threshold adjustment and automated event
+  capture. Additionally, it includes an interactive shell for manual
+  device control and a statistical analysis tool that computes event
+  durations, jitter, and latencies from captured data. Built in Go,
+  the suite is distributed as self-contained binaries for Windows,
+  macOS, and Linux. The source code and a library for embedding BBTK
+  control in Go applications are available under the GPL-3.0 licence
+  at \url{https://github.com/chrplr/bbtkv3}.%
 }
 
 \keywords{timing accuracy, stimulus presentation, response time, Black Box ToolKit, open-source software, behavioral research methods}
@@ -48,25 +62,57 @@ Experimental psychologists require sub-millisecond accuracy in measuring stimulu
 \section{Introduction}
 \label{sec:introduction}
 
-Precise timing is a cornerstone of experimental psychology. Variations in stimulus presentation or response recording can introduce noise or even systematic biases that confound experimental results \parencite{plant2004}. While modern computers are capable of high performance, their multi-tasking operating systems and complex hardware architectures (e.g., display buffering, USB polling) often introduce unpredictable latencies.
+Precise timing is a cornerstone of experimental psychology. Variations
+in stimulus presentation or response recording can introduce noise or
+even systematic biases that confound experimental results
+\parencite{plant2004}. While modern computers are capable of high
+performance, their multi-tasking operating systems and complex
+hardware architectures (e.g., display buffering, USB polling) often
+introduce unpredictable latencies.
 
 
-The Black Box ToolKit (BBTK) was developed to address these challenges by providing an external hardware reference for timing measurements. It acts as a digital oscilloscope and signal generator, capable of capturing activity on light and sound sensors, as well as TTL signals, with sub-millisecond precision. The typical experimental setup involves three components: a) A \textbf{stimulation device} (e.g., a computer) running the experimental paradigm;
-b) The \textbf{BBTK hardware} with input sensors (photodiodes, microphones) and TTL inputs/outputs connected to the stimulation device; c) A \textbf{host computer} (which may be the same as the stimulation device with our software) driving the BBTK and recording the data (see Figure~\ref{fig:operation}).
+The Black Box ToolKit (BBTK) was developed to address these challenges
+by providing an external hardware reference for timing
+measurements. It acts as a digital oscilloscope and signal generator,
+capable of capturing activity on light and sound sensors, as well as
+TTL signals, with sub-millisecond precision. The typical experimental
+setup involves three components: a) A \textbf{stimulation device}
+(e.g., a computer) running the experimental paradigm; b) The
+\textbf{BBTK hardware} with input sensors (photodiodes, microphones)
+and TTL inputs/outputs connected to the stimulation device; c) A
+\textbf{host computer} (which may be the same as the stimulation
+device with our software) driving the BBTK and recording the data (see
+Figure~\ref{fig:operation}).
 
 \begin{figure*}[ht]
     \centering
     \includegraphics[width=0.8\textwidth]{bbtk-setup.png}
-    \caption{Principle of operation: The BBTK acts as an independent observer of the stimulation device's outputs. Here a optical sensor detects when the illumination of the screen reaches a certain threshold. Here, the `bbtk-capture` program that drives the BBTK device during events capture runs on the stimulation computer.}
+    \caption{Principle of operation: The BBTK acts as an independent
+      observer of the stimulation device's outputs. Here a optical
+      sensor detects when the illumination of the screen reaches a
+      certain threshold. Here, the `bbtk-capture` program that drives
+      the BBTK device during events capture runs on the stimulation
+      computer.}
     \label{fig:operation}
 \end{figure*}
 
-The BBTK communicates with the host computer via a serial protocol described in the BBTK API guide \cite{plant2016}. The \texttt{bbtkv3} software suite that we developped encapsulates this protocol into a set of command-line tools and a high-level library. Designed to be cross-platform (while the vendor's software is specific to Windows), it is easy to install, and can be integrated into automated testing workflows. One of its advantages is that the event capture can run simultaneously on the same computer that runs the stimulation.
+The BBTK communicates with the host computer via a serial protocol
+described in the BBTK API guide \parencite{plant2016}. The
+\texttt{bbtkv3} software suite that we developped encapsulates this
+protocol into a set of command-line tools and a high-level
+library. Designed to be cross-platform (while the vendor's software is
+specific to Windows), it is easy to install, and can be integrated
+into automated testing workflows. One of its advantages is that the
+event capture can run simultaneously on the same computer that runs
+the stimulation.
 
 
 \subsection{Software Suite Components}
 
-The \texttt{bbtkv3} suite consists of several modular CLI tools, summarized in Table~\ref{tab:tools}. This modularity allows researchers to use only the components they need or to chain them together in scripts.
+The \texttt{bbtkv3} suite consists of several modular CLI tools,
+summarized in Table~\ref{tab:tools}. This modularity allows
+researchers to use only the components they need or to chain them
+together in scripts.
 
 \begin{table*}[ht]
 \caption{The \texttt{bbtkv3} toolset}
@@ -94,36 +140,60 @@ Tool & Description \\
 
 \subsection{Calibration and Monitoring}
 
-Proper calibration of sensor thresholds is critical for reliable data. The \texttt{bbtk-adjust-thresholds} and \texttt{bbtk-input-check} tools provide researchers with immediate feedback on sensor activity, allowing them to set sensitivity levels that distinguish stimuli from background noise or ambient light.
+Proper calibration of sensor thresholds is important for reliable
+data. The \texttt{bbtk-adjust-thresholds} and
+\texttt{bbtk-input-check} tools provide researchers with feedback on
+sensor activity, allowing them to set sensitivity levels that
+distinguish stimuli from background noise or ambient light.
 
 \subsection{Event Capture and Analysis}
 
-The primary uses of \texttt{bbtkv3} is the objective measurement of latencies. For example, a researcher might want to measure the delay between a TTL trigger sent by the experimental software and the actual appearance of a stimulus on the screen (detected by a photodiode).
+OCThe primary uses of \texttt{bbtkv3} is the objective measurement of
+latencies. For example, a researcher might want to measure the delay
+between a TTL trigger sent by the experimental software and the actual
+appearance of a stimulus on the screen (detected by a photodiode).
 
-The \texttt{bbtk-capture} tool automates this process. It can be launched for a specific duration, during which it records all transitions on the 12 input lines (4 optical, 2 microphone, 2 TTL, and 4 keypad inputs).
+The \texttt{bbtk-capture} tool automates this process. It can be
+launched for a specific duration, during which it records all
+transitions on the 12 input lines (4 optical, 2 microphone, 2 TTL, and
+4 keypad inputs). All the user has to do is enter the command shown on Listing~1 below.
 
 \begin{lstlisting}[language=bash, frame=none, numbers=none, caption={Example capture command}, basicstyle=\ttfamily\small]
 # Detect port and capture for 60 seconds
 BBTK_PORT=$(bbtk-detect-port)
 bbtk-capture -d 60
+# analyse measurements
 events-stats bbtk-capture-001.events.csv
 \end{lstlisting}
 
-At the end of the event capture, the data is downloaded from the BBTK onto the host PC and saved for further analyses. Among the saved files, a  \texttt{.dat} file contains the raw output of the BBTK, and an \texttt{.events.csv} file contains a table with three colums: \texttt{type, onset, duration}. \texttt{type} specifies the name of the sensor.
+At the end of the event capture, data are downloaded from the BBTK
+onto the host PC and saved for further analyses. Among the saved
+files, a \texttt{.dat} file contains the raw output of the BBTK and an
+\texttt{.events.csv} file consists of a a table with three columns:
+\texttt{type, onset, duration}, where \texttt{type} indicates the
+sensor (\texttt{Opto1}, \texttt{Mic1}, \texttt{TTLin1}, ...
 
-A tool is provided, \texttt{events-stats}, which processes the `.events.csv` file to produce descriptive statistics and ASCII histograms. It computes a) Event durations (Distribution of how long each sensor remained active); b)
- Inter-onset intervals (Timing regularity of successive events on a given sensor) and c)
-  Paired-event onset differences (The latency between a reference event (e.g., TTL trigger) and a target event (e.g., photodiode detection). The listing below show the output of an event file generated by a stimulation on a Raspberry 4.
+This CSV file can easily be imported in a spreadsheet, a Python or R
+notebook for inspection. Nevertheless, we provide a command-line tool,
+\texttt{events-stats}, which can immediatly outputs descriptive
+statistics and ASCII histograms about the timing data. It computes a)
+\textbf{event durations}, that is, the distribution of how long each
+sensor remained active; b) \textbf{inter-onset intervals}, the timing
+regularity of successive events on a given sensor; c)
+\textbf{paired-event onset differences}, the latency between a
+reference event (e.g., TTL trigger) and a target event (e.g.,
+photodiode detection). Figure~\ref{stats} shows an example of the
+output from a simple stimulation program (1 frame on --- 2 frames off)
+ran on a Raspberry 4.
 
   \begin{figure*}
-  \begin{lstlisting}[frame=none, numbers=none,caption={Example output of events-stats}, basicstyle=\ttfamily\footnotesize]
+    \begin{lstlisting}[frame=none, numbers=none, basicstyle=\ttfamily\small]
 === Duration Statistics (ms) ===
 
-Type    N     Min     P10     P20     P30     P40     P50     P60     P70     P80     P90     Max     Range  P99.5-P0.5  P95-P05  SD
-----    -     ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     -----  ----------  -------  --
-Opto1   1000  36.500  37.000  37.000  37.000  37.250  37.250  37.250  37.250  37.500  37.500  37.750  1.250  1.000       0.500    0.204
+Type    N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
+----    -     ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
+Opto1   1000  36.5  37.0  37.0  37.2  37.2  37.5  37.8  1.2    0.5      37.2  0.20
 
-  histogram (10 bins):
   [  36.500,   36.625) ms :     2
   [  36.625,   36.750) ms :     0
   [  36.750,   36.875) ms :    28  **
@@ -137,11 +207,10 @@ Opto1   1000  36.500  37.000  37.000  37.000  37.250  37.250  37.250  37.250  37
 
 === Inter-Onset Interval / Jitter Statistics (ms) ===
 
-Type    N    Min     P10     P20     P30     P40     P50     P60     P70     P80     P90     Max     Range  P99.5-P0.5  P95-P05  SD
-----    -    ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     -----  ----------  -------  --
-Opto1   999  49.250  49.750  49.750  50.000  50.000  50.000  50.000  50.000  50.250  50.250  50.500  1.250  1.000       0.500    0.191
+Type    N    Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
+----    -    ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
+Opto1   999  49.2  49.8  49.8  50.0  50.0  50.2  50.5  1.2    0.5      50.0  0.19
 
-  histogram (10 bins):
   [  49.250,   49.375) ms :     1
   [  49.375,   49.500) ms :     0
   [  49.500,   49.625) ms :    13  *
@@ -153,13 +222,12 @@ Opto1   999  49.250  49.750  49.750  50.000  50.000  50.000  50.000  50.000  50.
   [  50.250,   50.375) ms :   227  ******************
   [  50.375,   50.500) ms :     7
 
-=== Paired-Event Onset Differences: TTLin1 -> Opto1 (ms) ===
+=== Paired-Event Onset Differences: TTLin1 > Opto1 (ms) ===
 
-Type          N     Min     P10     P20     P30     P40     P50     P60     P70     P80     P90     Max     Range  P99.5-P0.5  P95-P05  SD
-----          -     ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     ---     -----  ----------  -------  --
-TTLin1>Opto1  1000  31.000  39.000  39.000  39.175  39.250  39.250  39.250  39.250  39.250  39.500  39.750  8.750  1.000       0.500    0.322
+Type          N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
+----          -     ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
+TTLin1>Opto1  1000  31.0  39.0  39.0  39.2  39.2  39.5  39.8  8.8    0.5      39.2  0.32
 
-  histogram (10 bins):
   [  31.000,   31.875) ms :     1
   [  31.875,   32.750) ms :     0
   [  32.750,   33.625) ms :     0
@@ -171,26 +239,56 @@ TTLin1>Opto1  1000  31.000  39.000  39.000  39.175  39.250  39.250  39.250  39.2
   [  38.000,   38.875) ms :    22
   [  38.875,   39.750) ms :   977  ****************************************
 \end{lstlisting}
+\caption{Print out of \texttt{events-stats} from a capture taken while
+  the stimulation computer presented 1000 cycles of 1 frame-on, 2
+  frames-off. The display monitor refresh rate was fixed at 60Hz. The
+  first section show the detected duration of the on-frames; note that
+  the BBTK adds 20ms to the duration measures because smoothing was
+  set on Opto1). The second section reports on the SOA between
+  successive on-frames. The last section display statistics about the
+  delay between Opto1 activation and a TTL signal that was sent just
+  after the call to display flip. Note the 2-frames delay.}
+\label{stats}
 \end{figure*}
 
-\subsection{Interative Usages}
 
-An interactive tool, \texttt{ibbtk}, allows the user to ``manually'' send commands. This is useful for debugging and exploration of the device's capabilities. It maintains a persistent connection, avoiding the overhead of re-opening the serial port for each command.
+\subsection{Interative Usage}
+
+An interactive tool, \texttt{ibbtk}, allows the user to ``manually''
+send commands. This is useful for debugging and exploration of the
+device's capabilities. It maintains a persistent connection, avoiding
+the overhead of re-opening the serial port for each command.
 
 \subsection{Library}
 
-Furthermore, because the entire suite is built upon a modular Go package, developers can easily integrate BBTK control directly into their own Go-based experimental or analysis software.
+Furthermore, because the entire suite is built upon a modular Go
+package, developers can easily integrate BBTK control directly into
+their own Go-based experimental or analysis software, e.g.,
+\parencite{goxpyrepo}.
 
 \section{Implementation and Availability}
 \label{sec:availability}
 
-\texttt{bbtkv3} is written in Go 1.25, leveraging the \texttt{go.bug.st/serial} library for robust cross-platform serial communication. By using Go, we are able to provide self-contained, statically linked binaries that require no runtime environment (like Python or Java) or external DLLs.
+\texttt{bbtkv3} is written in Go, leveraging the
+\texttt{go.bug.st/serial} library for cross-platform serial
+communication. By using Go, we are able to provide self-contained,
+statically linked binaries that require no runtime environment (like
+Python or Java) nor external DLLs.
 
-The software is available for Windows (x86-64 and ARM64), macOS (Intel and Apple Silicon), and Linux. Source code and pre-compiled binaries are hosted on GitHub (\url{https://github.com/chrplr/bbtkv3}) under the GNU General Public Licence v3.
+The software is available for Windows, macOS, and Linux, and Intel and
+arm architectures for each operating system. Source code and
+pre-compiled binaries are hosted on GitHub
+(\url{https://github.com/chrplr/bbtkv3}) under the GNU General Public
+Licence v3.
 
 \section*{Author Contributions}
 
-C.P. conceptualized the software, designed the library, and implemented the tools. Claude Sonnet and Gemini 2.5 were used in the final phase of the project, to clean some bugs and to develop the event-stats tool. Consistent with current editorial norms \parencite{springernature2023}. C.P. takes full responsibility for the content of the work.
+C.P. conceptualized the software, designed the library, and
+implemented the tools. Claude Sonnet and Gemini 2.5 were used in the
+final phase of the project, to clean some bugs and to develop the
+event-stats tool. Consistent with current editorial norms
+\parencite{springernature2023}. C.P. takes full responsibility for the
+content of the work.
 
 \printbibliography
 

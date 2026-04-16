@@ -33,7 +33,7 @@ type row struct {
 func main() {
 	event1 := flag.String("event1", "TTLin1", "first event type for paired-difference analysis")
 	event2 := flag.String("event2", "Opto1", "second event type for paired-difference analysis (difference = event2 − event1)")
-	outlierK := flag.Float64("detect-outliers", 0, "exclude values more than this many ms away from the median (set to 0 to disable)")
+	outlierK := flag.Float64("detect-outliers", 50, "exclude values more than this many ms away from the median (set to 0 to disable)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [-event1 TYPE] [-event2 TYPE] [-detect-outliers MS] <file.events.csv> [file2.events.csv ...]\n", os.Args[0])
 		flag.PrintDefaults()
@@ -70,7 +70,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	pcts := []int{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}
+	pcts := []int{0, 5, 25, 50, 75, 95, 100}
 
 	// ── Duration statistics ────────────────────────────────────────────────
 	fmt.Println("=== Duration Statistics (ms) ===")
@@ -99,6 +99,19 @@ func main() {
 	} else {
 		printSingleRow(fmt.Sprintf("%s→%s", *event1, *event2), diffs, pcts, *outlierK)
 	}
+}
+
+
+func average(vals []float64) float64 {
+	n := len(vals)
+	if n == 0 {
+		panic("Cannot compute the average of a empty vector")
+	}
+	sum := 0.0
+	for _, x := range(vals) {
+		sum += x
+	}
+	return sum / float64(n)
 }
 
 type outlierWarning struct {
@@ -134,7 +147,7 @@ func printTable(
 			header = append(header, fmt.Sprintf("P%d", p))
 		}
 	}
-	header = append(header, "Range", "P99.5-P0.5", "P95-P05", "SD")
+	header = append(header, "Range", "P95-P05", "Mean", "SD")
 	fmt.Fprintln(w, strings.Join(header, "\t"))
 
 	// Separator
@@ -165,16 +178,16 @@ func printTable(
 
 		cols := []string{typ, strconv.Itoa(len(vals))}
 		for _, p := range pcts {
-			cols = append(cols, fmt.Sprintf("%.3f", percentile(vals, float64(p))))
+			cols = append(cols, fmt.Sprintf("%.1f", percentile(vals, float64(p))))
 		}
 		rng := vals[len(vals)-1] - vals[0]
-		spread := percentile(vals, 99.5) - percentile(vals, 0.5)
+		avg := average(vals)
 		iqr := percentile(vals, 95) - percentile(vals, 5)
 		cols = append(cols,
-			fmt.Sprintf("%.3f", rng),
-			fmt.Sprintf("%.3f", spread),
-			fmt.Sprintf("%.3f", iqr),
-			fmt.Sprintf("%.3f", stddev(vals)),
+			fmt.Sprintf("%.1f", rng),
+			fmt.Sprintf("%.1f", iqr),
+			fmt.Sprintf("%.1f", avg),
+			fmt.Sprintf("%.2f", stddev(vals)),
 		)
 		fmt.Fprintln(w, strings.Join(cols, "\t"))
 	}
