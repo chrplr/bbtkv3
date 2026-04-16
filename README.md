@@ -495,7 +495,7 @@ LICENSE: GPL-3.0
 
 If you use this software, please cite this repository as:
 
-> Pallier, C. (2026). unipseudo-go [Computer software]. GitHub. https://github.com/chrplr/bbtkv3
+> Pallier, C. (2026). bbtkv3 [Computer software]. GitHub. https://github.com/chrplr/bbtkv3
 
 
 
