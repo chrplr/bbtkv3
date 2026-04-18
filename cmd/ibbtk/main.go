@@ -196,7 +196,7 @@ func main() {
 					fmt.Println("ok")
 
 					fmt.Printf("Capturing for %d seconds...\n", seconds)
-					data, err := b.CaptureEvents(seconds)
+					data, err := b.CaptureEvents(seconds, false)
 					if err != nil {
 						fmt.Printf("capture error: %v\n", err)
 						return nil
@@ -214,7 +214,7 @@ func main() {
 						return nil
 					}
 
-					dscFile := strings.TrimSuffix(outFile, ".dat") + ".dscevents.csv"
+					dscFile := strings.TrimSuffix(outFile, ".dat") + "-dscevents.csv"
 					if err := bbtkv3.SaveDSCEventsToCSV(dscEvents, dscFile); err != nil {
 						fmt.Printf("error saving DSC events: %v\n", err)
 						return nil
@@ -229,7 +229,7 @@ func main() {
 						return nil
 					}
 
-					evFile := strings.TrimSuffix(outFile, ".dat") + ".events.csv"
+					evFile := strings.TrimSuffix(outFile, ".dat") + "-events.csv"
 					if err := bbtkv3.SaveEventsToCSV(events, evFile); err != nil {
 						fmt.Printf("error saving events: %v\n", err)
 						return nil

@@ -1,8 +1,8 @@
 // bbtk-input-check: stream live input state from the BBTKv3.
 //
 // Sends the ICHK command to the device and prints every line it returns.
-// Press 'x' (no Enter needed) to stop; the program sends the break character
-// 'X' to the device and exits.
+// Press Esc (no Enter needed) to stop; the program sends the break character
+// to the device and exits.
 //
 // Usage:
 //
@@ -79,18 +79,18 @@ func main() {
 		}
 	}()
 
-	// Wait for the user to press 'x' / 'X'.
+	// Wait for the user to press Esc.
 	// Use raw terminal mode so no Enter is required.
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("Streaming input state. Press 'x' to stop.")
+		fmt.Print("Streaming input state. Press Esc to stop.")
 		buf := make([]byte, 1)
 		for {
 			n, err := os.Stdin.Read(buf)
 			if err != nil || n == 0 {
 				break
 			}
-			if buf[0] == 'x' || buf[0] == 'X' {
+			if buf[0] == 27 {
 				break
 			}
 		}

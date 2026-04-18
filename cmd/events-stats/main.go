@@ -1,4 +1,4 @@
-// events-stats: compute descriptive statistics on *events.csv files produced by bbtk-capture.
+// events-stats: compute descriptive statistics on *-events.csv files produced by bbtk-capture.
 //
 // For each event type found in the input files it reports:
 //   - percentiles 0 % (min), 10 %, 20 %, … 90 %, 100 % (max) of Duration
@@ -8,7 +8,7 @@
 //
 // Usage:
 //
-//	events-stats [-event1 TYPE] [-event2 TYPE] file1.events.csv [file2.events.csv ...]
+//	events-stats [-event1 TYPE] [-no-md] file1-events.csv [file2-events.csv ...]
 package main
 
 import (
@@ -18,10 +18,18 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
+
+	"image/color"
+
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg"
+	"gonum.org/v1/plot/vg/draw"
 )
 
 type row struct {
@@ -31,11 +39,12 @@ type row struct {
 }
 
 func main() {
-	event1 := flag.String("event1", "TTLin1", "first event type for paired-difference analysis")
-	event2 := flag.String("event2", "Opto1", "second event type for paired-difference analysis (difference = event2 − event1)")
+	event1 := flag.String("event1", "TTLin1", "reference event type; onset differences are reported for every other event type relative to this one")
 	outlierK := flag.Float64("detect-outliers", 50, "exclude values more than this many ms away from the median (set to 0 to disable)")
+	noMD := flag.Bool("no-md", false, "skip writing the markdown report")
+	noHTML := flag.Bool("no-html", false, "skip writing the HTML report")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-event1 TYPE] [-event2 TYPE] [-detect-outliers MS] <file.events.csv> [file2.events.csv ...]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-event1 TYPE] [-detect-outliers MS] [-no-md] <file-events.csv> [file2-events.csv ...]\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -90,17 +99,763 @@ func main() {
 	printTable(typeOrder, byType, pcts, jitterValues, true, true, *outlierK)
 
 	// ── Paired-event onset difference statistics ───────────────────────────
-	diffs := pairDiffs(allRows, *event1, *event2)
 	fmt.Println()
-	fmt.Printf("=== Paired-Event Onset Differences: %s → %s (ms) ===\n", *event1, *event2)
+	fmt.Printf("=== Paired-Event Onset Differences relative to %s (ms) ===\n", *event1)
 	fmt.Println()
-	if len(diffs) == 0 {
-		fmt.Printf("  (no pairs found — check that both %q and %q events exist in the input)\n", *event1, *event2)
+	otherTypes := otherEventTypes(typeOrder, *event1)
+	if len(otherTypes) == 0 {
+		fmt.Printf("  (no other event types found to pair with %q)\n", *event1)
 	} else {
-		printSingleRow(fmt.Sprintf("%s→%s", *event1, *event2), diffs, pcts, *outlierK)
+		for _, typ2 := range otherTypes {
+			diffs := pairDiffs(allRows, *event1, typ2)
+			if len(diffs) == 0 {
+				fmt.Printf("  (no pairs found for %s → %s)\n", *event1, typ2)
+				continue
+			}
+			printSingleRow(fmt.Sprintf("%s→%s", *event1, typ2), diffs, pcts, *outlierK)
+			fmt.Println()
+		}
+	}
+
+	// ── Markdown report ────────────────────────────────────────────────────
+	base := csvBasename(flag.Arg(0))
+	if !*noMD {
+		mdOut := base + ".md"
+		if err := writeMarkdownReport(mdOut, typeOrder, byType, allRows, pcts, *event1, *outlierK); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing markdown report: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "markdown report written to %s\n", mdOut)
+	}
+
+	// ── HTML report ────────────────────────────────────────────────────────
+	if !*noHTML {
+		htmlOut := base + ".html"
+		if err := writeHTMLReport(htmlOut, typeOrder, byType, allRows, pcts, *event1, *outlierK); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing HTML report: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "HTML report written to %s\n", htmlOut)
 	}
 }
 
+// ── Markdown report ──────────────────────────────────────────────────────────
+
+func writeMarkdownReport(
+	mdPath string,
+	typeOrder []string,
+	byType map[string][]row,
+	allRows []row,
+	pcts []int,
+	event1 string,
+	outlierK float64,
+) error {
+	f, err := os.Create(mdPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	mdDir := filepath.Dir(mdPath)
+	mdBase := strings.TrimSuffix(filepath.Base(mdPath), filepath.Ext(mdPath))
+
+	// Helper: save a PNG histogram and return a relative path for the markdown.
+	savePNG := func(vals []float64, title, xlabel, key string) (string, error) {
+		fname := fmt.Sprintf("%s_%s.png", mdBase, sanitizeFilename(key))
+		fpath := filepath.Join(mdDir, fname)
+		if err := saveHistogramPNG(vals, title, xlabel, fpath); err != nil {
+			return "", err
+		}
+		return fname, nil
+	}
+
+	// Helper: save a timeline scatter PNG and return a relative path.
+	saveTimelinePNGRel := func(xs, ys []float64, title, xlabel, ylabel, key string) (string, error) {
+		fname := fmt.Sprintf("%s_%s.png", mdBase, sanitizeFilename(key))
+		fpath := filepath.Join(mdDir, fname)
+		if err := saveTimelinePNG(xs, ys, title, xlabel, ylabel, fpath); err != nil {
+			return "", err
+		}
+		return fname, nil
+	}
+
+	valuesFnDuration := func(rows []row) []float64 {
+		vals := make([]float64, len(rows))
+		for i, r := range rows {
+			vals[i] = r.duration
+		}
+		return vals
+	}
+
+	fmt.Fprintln(f, "# Events Statistics Report")
+	fmt.Fprintln(f)
+
+	// ── Duration ────────────────────────────────────────────────────────────
+	fmt.Fprintln(f, "## Duration Statistics (ms)")
+	fmt.Fprintln(f)
+	writeMDTable(f, typeOrder, byType, pcts, valuesFnDuration, false, outlierK)
+
+	fmt.Fprintln(f)
+	fmt.Fprintln(f, "### Duration Histograms")
+	fmt.Fprintln(f)
+	for _, typ := range typeOrder {
+		vals, warn := filteredVals(byType[typ], valuesFnDuration, outlierK)
+		if len(vals) == 0 {
+			continue
+		}
+		if warn != nil {
+			fmt.Fprintf(f, "> **Warning:** %d outlier(s) excluded from %s (> %.3f ms from median)\n\n", warn.n, typ, warn.maxDist)
+		}
+		title := fmt.Sprintf("Duration – %s", typ)
+		pngRel, err := savePNG(vals, title, "Duration (ms)", "dur_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "![%s](%s)\n\n", title, pngRel)
+	}
+
+	// ── Jitter ──────────────────────────────────────────────────────────────
+	fmt.Fprintln(f, "## Inter-Onset Interval / Jitter Statistics (ms)")
+	fmt.Fprintln(f)
+	writeMDTable(f, typeOrder, byType, pcts, jitterValues, true, outlierK)
+
+	fmt.Fprintln(f)
+	fmt.Fprintln(f, "### Jitter Histograms")
+	fmt.Fprintln(f)
+	for _, typ := range typeOrder {
+		vals, warn := filteredVals(byType[typ], jitterValues, outlierK)
+		if len(vals) == 0 {
+			continue
+		}
+		if warn != nil {
+			fmt.Fprintf(f, "> **Warning:** %d outlier(s) excluded from %s (> %.3f ms from median)\n\n", warn.n, typ, warn.maxDist)
+		}
+		title := fmt.Sprintf("Jitter (IOI) – %s", typ)
+		pngRel, err := savePNG(vals, title, "Inter-Onset Interval (ms)", "jitter_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "![%s](%s)\n\n", title, pngRel)
+	}
+
+	// ── Paired differences ──────────────────────────────────────────────────
+	fmt.Fprintf(f, "## Paired-Event Onset Differences relative to %s (ms)\n\n", event1)
+	otherTypes := otherEventTypes(typeOrder, event1)
+	if len(otherTypes) == 0 {
+		fmt.Fprintf(f, "_No other event types found to pair with `%s`._\n\n", event1)
+	} else {
+		fmt.Fprintln(f, "### Tables")
+		fmt.Fprintln(f)
+		// Build a combined table with one row per pairing.
+		type pairResult struct {
+			label string
+			vals  []float64
+		}
+		var pairs []pairResult
+		for _, typ2 := range otherTypes {
+			diffs := pairDiffs(allRows, event1, typ2)
+			if len(diffs) == 0 {
+				continue
+			}
+			pairs = append(pairs, pairResult{fmt.Sprintf("%s→%s", event1, typ2), diffs})
+		}
+		for _, pr := range pairs {
+			label := pr.label
+			precomputed := pr.vals
+			fakeByType := map[string][]row{label: {}}
+			writeMDTable(f, []string{label}, fakeByType, pcts, func(_ []row) []float64 { return precomputed }, false, outlierK)
+			fmt.Fprintln(f)
+		}
+
+		fmt.Fprintln(f, "### Paired-Event Histograms")
+		fmt.Fprintln(f)
+		for _, pr := range pairs {
+			vals, warn := filteredVals(nil, func(_ []row) []float64 { return pr.vals }, outlierK)
+			if warn != nil {
+				fmt.Fprintf(f, "> **Warning:** %d outlier(s) excluded from %s (> %.3f ms from median)\n\n", warn.n, pr.label, warn.maxDist)
+			}
+			if len(vals) == 0 {
+				continue
+			}
+			title := fmt.Sprintf("Onset Diff – %s", pr.label)
+			key := "diff_" + sanitizeFilename(pr.label)
+			pngRel, err := savePNG(vals, title, "Onset Difference (ms)", key)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(f, "![%s](%s)\n\n", title, pngRel)
+		}
+	}
+
+	// ── Timeline plots ──────────────────────────────────────────────────────
+	fmt.Fprintln(f, "## Timeline Plots")
+	fmt.Fprintln(f)
+	for _, typ := range typeOrder {
+		rows := byType[typ]
+		if len(rows) == 0 {
+			continue
+		}
+		// Sort rows by onset for consistent x ordering.
+		sorted := make([]row, len(rows))
+		copy(sorted, rows)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i].onset < sorted[j].onset })
+
+		// Duration vs. time.
+		xs := make([]float64, len(sorted))
+		ys := make([]float64, len(sorted))
+		for i, r := range sorted {
+			xs[i] = r.onset
+			ys[i] = r.duration
+		}
+		title := fmt.Sprintf("Duration over time – %s", typ)
+		pngRel, err := saveTimelinePNGRel(xs, ys, title, "Onset (ms)", "Duration (ms)", "timeline_dur_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "![%s](%s)\n\n", title, pngRel)
+
+		// SOA vs. time (x = onset[i], y = onset[i+1] − onset[i]).
+		if len(sorted) < 2 {
+			continue
+		}
+		soaXs := make([]float64, len(sorted)-1)
+		soaYs := make([]float64, len(sorted)-1)
+		for i := 0; i < len(sorted)-1; i++ {
+			soaXs[i] = sorted[i].onset
+			soaYs[i] = sorted[i+1].onset - sorted[i].onset
+		}
+		title = fmt.Sprintf("SOA over time – %s", typ)
+		pngRel, err = saveTimelinePNGRel(soaXs, soaYs, title, "Onset (ms)", "SOA (ms)", "timeline_soa_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "![%s](%s)\n\n", title, pngRel)
+	}
+
+	return nil
+}
+
+// ── HTML report ──────────────────────────────────────────────────────────────
+
+const htmlHeader = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Events Statistics Report</title>
+<style>
+  body { font-family: sans-serif; max-width: 1100px; margin: 2em auto; color: #222; }
+  h1 { border-bottom: 2px solid #444; padding-bottom: 0.3em; }
+  h2 { border-bottom: 1px solid #aaa; margin-top: 2em; }
+  table { border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }
+  th, td { border: 1px solid #ccc; padding: 0.35em 0.7em; text-align: right; }
+  th { background: #f0f0f0; text-align: center; }
+  td:first-child, th:first-child { text-align: left; }
+  img { max-width: 100%; margin: 0.5em 0 1.5em; display: block; }
+  blockquote { background: #fff8e1; border-left: 4px solid #f5a623; margin: 0.5em 0; padding: 0.4em 0.8em; }
+</style>
+</head>
+<body>
+<h1>Events Statistics Report</h1>
+`
+
+const htmlFooter = `</body>
+</html>
+`
+
+func writeHTMLReport(
+	htmlPath string,
+	typeOrder []string,
+	byType map[string][]row,
+	allRows []row,
+	pcts []int,
+	event1 string,
+	outlierK float64,
+) error {
+	f, err := os.Create(htmlPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	htmlDir := filepath.Dir(htmlPath)
+	htmlBase := strings.TrimSuffix(filepath.Base(htmlPath), filepath.Ext(htmlPath))
+
+	savePNG := func(vals []float64, title, xlabel, key string) (string, error) {
+		fname := fmt.Sprintf("%s_%s.png", htmlBase, sanitizeFilename(key))
+		fpath := filepath.Join(htmlDir, fname)
+		if err := saveHistogramPNG(vals, title, xlabel, fpath); err != nil {
+			return "", err
+		}
+		return fname, nil
+	}
+
+	saveTimelinePNGRel := func(xs, ys []float64, title, xlabel, ylabel, key string) (string, error) {
+		fname := fmt.Sprintf("%s_%s.png", htmlBase, sanitizeFilename(key))
+		fpath := filepath.Join(htmlDir, fname)
+		if err := saveTimelinePNG(xs, ys, title, xlabel, ylabel, fpath); err != nil {
+			return "", err
+		}
+		return fname, nil
+	}
+
+	valuesFnDuration := func(rows []row) []float64 {
+		vals := make([]float64, len(rows))
+		for i, r := range rows {
+			vals[i] = r.duration
+		}
+		return vals
+	}
+
+	fmt.Fprint(f, htmlHeader)
+
+	// ── Duration ────────────────────────────────────────────────────────────
+	fmt.Fprintln(f, "<h2>Duration Statistics (ms)</h2>")
+	writeHTMLTable(f, typeOrder, byType, pcts, valuesFnDuration, false, outlierK)
+
+	fmt.Fprintln(f, "<h3>Duration Histograms</h3>")
+	for _, typ := range typeOrder {
+		vals, warn := filteredVals(byType[typ], valuesFnDuration, outlierK)
+		if len(vals) == 0 {
+			continue
+		}
+		if warn != nil {
+			fmt.Fprintf(f, "<blockquote><strong>Warning:</strong> %d outlier(s) excluded from %s (&gt; %.3f ms from median)</blockquote>\n", warn.n, typ, warn.maxDist)
+		}
+		title := fmt.Sprintf("Duration – %s", typ)
+		pngRel, err := savePNG(vals, title, "Duration (ms)", "dur_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "<img src=\"%s\" alt=\"%s\">\n", pngRel, title)
+	}
+
+	// ── Jitter ──────────────────────────────────────────────────────────────
+	fmt.Fprintln(f, "<h2>Inter-Onset Interval / Jitter Statistics (ms)</h2>")
+	writeHTMLTable(f, typeOrder, byType, pcts, jitterValues, true, outlierK)
+
+	fmt.Fprintln(f, "<h3>Jitter Histograms</h3>")
+	for _, typ := range typeOrder {
+		vals, warn := filteredVals(byType[typ], jitterValues, outlierK)
+		if len(vals) == 0 {
+			continue
+		}
+		if warn != nil {
+			fmt.Fprintf(f, "<blockquote><strong>Warning:</strong> %d outlier(s) excluded from %s (&gt; %.3f ms from median)</blockquote>\n", warn.n, typ, warn.maxDist)
+		}
+		title := fmt.Sprintf("Jitter (IOI) – %s", typ)
+		pngRel, err := savePNG(vals, title, "Inter-Onset Interval (ms)", "jitter_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "<img src=\"%s\" alt=\"%s\">\n", pngRel, title)
+	}
+
+	// ── Paired differences ──────────────────────────────────────────────────
+	fmt.Fprintf(f, "<h2>Paired-Event Onset Differences relative to %s (ms)</h2>\n", event1)
+	otherTypes := otherEventTypes(typeOrder, event1)
+	if len(otherTypes) == 0 {
+		fmt.Fprintf(f, "<p><em>No other event types found to pair with <code>%s</code>.</em></p>\n", event1)
+	} else {
+		fmt.Fprintln(f, "<h3>Tables</h3>")
+		type pairResult struct {
+			label string
+			vals  []float64
+		}
+		var pairs []pairResult
+		for _, typ2 := range otherTypes {
+			diffs := pairDiffs(allRows, event1, typ2)
+			if len(diffs) == 0 {
+				continue
+			}
+			pairs = append(pairs, pairResult{fmt.Sprintf("%s→%s", event1, typ2), diffs})
+		}
+		for _, pr := range pairs {
+			label := pr.label
+			precomputed := pr.vals
+			fakeByType := map[string][]row{label: {}}
+			writeHTMLTable(f, []string{label}, fakeByType, pcts, func(_ []row) []float64 { return precomputed }, false, outlierK)
+		}
+
+		fmt.Fprintln(f, "<h3>Paired-Event Histograms</h3>")
+		for _, pr := range pairs {
+			vals, warn := filteredVals(nil, func(_ []row) []float64 { return pr.vals }, outlierK)
+			if warn != nil {
+				fmt.Fprintf(f, "<blockquote><strong>Warning:</strong> %d outlier(s) excluded from %s (&gt; %.3f ms from median)</blockquote>\n", warn.n, pr.label, warn.maxDist)
+			}
+			if len(vals) == 0 {
+				continue
+			}
+			title := fmt.Sprintf("Onset Diff – %s", pr.label)
+			key := "diff_" + sanitizeFilename(pr.label)
+			pngRel, err := savePNG(vals, title, "Onset Difference (ms)", key)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(f, "<img src=\"%s\" alt=\"%s\">\n", pngRel, title)
+		}
+	}
+
+	// ── Timeline plots ──────────────────────────────────────────────────────
+	fmt.Fprintln(f, "<h2>Timeline Plots</h2>")
+	for _, typ := range typeOrder {
+		rows := byType[typ]
+		if len(rows) == 0 {
+			continue
+		}
+		sorted := make([]row, len(rows))
+		copy(sorted, rows)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i].onset < sorted[j].onset })
+
+		xs := make([]float64, len(sorted))
+		ys := make([]float64, len(sorted))
+		for i, r := range sorted {
+			xs[i] = r.onset
+			ys[i] = r.duration
+		}
+		title := fmt.Sprintf("Duration over time – %s", typ)
+		pngRel, err := saveTimelinePNGRel(xs, ys, title, "Onset (ms)", "Duration (ms)", "timeline_dur_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "<img src=\"%s\" alt=\"%s\">\n", pngRel, title)
+
+		if len(sorted) < 2 {
+			continue
+		}
+		soaXs := make([]float64, len(sorted)-1)
+		soaYs := make([]float64, len(sorted)-1)
+		for i := 0; i < len(sorted)-1; i++ {
+			soaXs[i] = sorted[i].onset
+			soaYs[i] = sorted[i+1].onset - sorted[i].onset
+		}
+		title = fmt.Sprintf("SOA over time – %s", typ)
+		pngRel, err = saveTimelinePNGRel(soaXs, soaYs, title, "Onset (ms)", "SOA (ms)", "timeline_soa_"+typ)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "<img src=\"%s\" alt=\"%s\">\n", pngRel, title)
+	}
+
+	fmt.Fprint(f, htmlFooter)
+	return nil
+}
+
+// writeHTMLTable writes an HTML <table> of percentile statistics to w.
+func writeHTMLTable(
+	w io.Writer,
+	typeOrder []string,
+	byType map[string][]row,
+	pcts []int,
+	valuesFn func([]row) []float64,
+	isJitter bool,
+	outlierK float64,
+) {
+	header := []string{"Type", "N"}
+	for _, p := range pcts {
+		switch p {
+		case 0:
+			header = append(header, "Min")
+		case 100:
+			header = append(header, "Max")
+		default:
+			header = append(header, fmt.Sprintf("P%d", p))
+		}
+	}
+	header = append(header, "Range", "P95-P05", "Mean", "SD")
+
+	fmt.Fprintln(w, "<table>")
+	fmt.Fprint(w, "<tr>")
+	for _, h := range header {
+		fmt.Fprintf(w, "<th>%s</th>", h)
+	}
+	fmt.Fprintln(w, "</tr>")
+
+	for _, typ := range typeOrder {
+		rows := byType[typ]
+		vals := valuesFn(rows)
+		if len(vals) == 0 {
+			continue
+		}
+		sort.Float64s(vals)
+		filtered, _ := filterOutliers(vals, outlierK)
+		vals = filtered
+
+		cols := []string{typ, strconv.Itoa(len(vals))}
+		for _, p := range pcts {
+			cols = append(cols, fmt.Sprintf("%.1f", percentile(vals, float64(p))))
+		}
+		rng := vals[len(vals)-1] - vals[0]
+		avg := average(vals)
+		iqr := percentile(vals, 95) - percentile(vals, 5)
+		cols = append(cols,
+			fmt.Sprintf("%.1f", rng),
+			fmt.Sprintf("%.1f", iqr),
+			fmt.Sprintf("%.1f", avg),
+			fmt.Sprintf("%.2f", stddev(vals)),
+		)
+		fmt.Fprint(w, "<tr>")
+		for _, c := range cols {
+			fmt.Fprintf(w, "<td>%s</td>", c)
+		}
+		fmt.Fprintln(w, "</tr>")
+	}
+	fmt.Fprintln(w, "</table>")
+}
+
+// filteredVals extracts and filters values for a single type.
+// rows may be nil when vals are pre-computed via valuesFn ignoring rows.
+func filteredVals(rows []row, valuesFn func([]row) []float64, outlierK float64) ([]float64, *outlierWarning) {
+	vals := valuesFn(rows)
+	if len(vals) == 0 {
+		return nil, nil
+	}
+	sort.Float64s(vals)
+	filtered, outliers := filterOutliers(vals, outlierK)
+	if len(outliers) > 0 {
+		return filtered, &outlierWarning{n: len(outliers), maxDist: outlierK, vals: outliers}
+	}
+	return filtered, nil
+}
+
+// stickPlotter draws a vertical line from y=0 to each (x, y) point.
+type stickPlotter struct {
+	pts       plotter.XYs
+	lineStyle draw.LineStyle
+}
+
+func newStickPlotter(xs, ys []float64) *stickPlotter {
+	pts := make(plotter.XYs, len(xs))
+	for i := range xs {
+		pts[i].X = xs[i]
+		pts[i].Y = ys[i]
+	}
+	return &stickPlotter{
+		pts: pts,
+		lineStyle: draw.LineStyle{
+			Color: color.RGBA{R: 70, G: 130, B: 180, A: 255},
+			Width: vg.Points(0.5),
+		},
+	}
+}
+
+func (s *stickPlotter) Plot(c draw.Canvas, plt *plot.Plot) {
+	trX, trY := plt.Transforms(&c)
+	y0 := trY(0)
+	for _, pt := range s.pts {
+		x := trX(pt.X)
+		y1 := trY(pt.Y)
+		c.StrokeLine2(s.lineStyle, x, y0, x, y1)
+	}
+}
+
+func (s *stickPlotter) DataRange() (xmin, xmax, ymin, ymax float64) {
+	xmin, xmax, ymin, ymax = plotter.XYRange(s.pts)
+	if ymin > 0 {
+		ymin = 0
+	}
+	return
+}
+
+// saveTimelinePNG saves a stick plot of ys vs xs to path.
+func saveTimelinePNG(xs, ys []float64, title, xlabel, ylabel, path string) error {
+	p := plot.New()
+	p.Title.Text = title
+	p.X.Label.Text = xlabel
+	p.Y.Label.Text = ylabel
+	p.Add(newStickPlotter(xs, ys))
+	return p.Save(7*vg.Inch, 3*vg.Inch, path)
+}
+
+// logHistPlotter draws a histogram with a log Y axis.
+// Empty bins are rendered at floor so the log axis stays well-defined.
+type logHistPlotter struct {
+	edges  []float64 // nBins+1 bin edges
+	counts []float64 // nBins heights (>= floor)
+	floor  float64
+	color  color.Color
+}
+
+func newLogHistPlotter(vals []float64, nBins int, floor float64) *logHistPlotter {
+	mn, mx := vals[0], vals[0]
+	for _, v := range vals {
+		if v < mn {
+			mn = v
+		}
+		if v > mx {
+			mx = v
+		}
+	}
+	binW := (mx - mn) / float64(nBins)
+	if binW == 0 {
+		binW = 1
+	}
+	counts := make([]int, nBins)
+	for _, v := range vals {
+		b := int((v - mn) / binW)
+		if b >= nBins {
+			b = nBins - 1
+		}
+		counts[b]++
+	}
+	edges := make([]float64, nBins+1)
+	for i := range edges {
+		edges[i] = mn + float64(i)*binW
+	}
+	heights := make([]float64, nBins)
+	for i, c := range counts {
+		if c == 0 {
+			heights[i] = floor
+		} else {
+			heights[i] = float64(c)
+		}
+	}
+	return &logHistPlotter{
+		edges:  edges,
+		counts: heights,
+		floor:  floor,
+		color:  color.RGBA{R: 100, G: 149, B: 237, A: 200},
+	}
+}
+
+func (h *logHistPlotter) Plot(c draw.Canvas, plt *plot.Plot) {
+	trX, trY := plt.Transforms(&c)
+	for i, cnt := range h.counts {
+		x0 := trX(h.edges[i])
+		x1 := trX(h.edges[i+1])
+		y0 := trY(h.floor)
+		y1 := trY(cnt)
+		pts := []vg.Point{{X: x0, Y: y0}, {X: x1, Y: y0}, {X: x1, Y: y1}, {X: x0, Y: y1}}
+		c.FillPolygon(h.color, pts)
+		c.StrokeLines(draw.LineStyle{Color: color.Gray{Y: 80}, Width: vg.Points(0.3)},
+			[]vg.Point{{X: x0, Y: y0}, {X: x0, Y: y1}, {X: x1, Y: y1}, {X: x1, Y: y0}})
+	}
+}
+
+func (h *logHistPlotter) DataRange() (xmin, xmax, ymin, ymax float64) {
+	xmin = h.edges[0]
+	xmax = h.edges[len(h.edges)-1]
+	ymin = h.floor
+	ymax = h.floor
+	for _, c := range h.counts {
+		if c > ymax {
+			ymax = c
+		}
+	}
+	return
+}
+
+// saveHistogramPNG saves a log-scale histogram PNG of vals to path.
+func saveHistogramPNG(vals []float64, title, xlabel, path string) error {
+	const nBins = 20
+	const floor = 0.5
+
+	p := plot.New()
+	p.Title.Text = title
+	p.X.Label.Text = xlabel
+	p.Y.Label.Text = "Count (log₁₀)"
+	p.Y.Scale = plot.LogScale{}
+	p.Y.Tick.Marker = plot.LogTicks{}
+	p.Add(newLogHistPlotter(vals, nBins, floor))
+
+	return p.Save(5*vg.Inch, 3*vg.Inch, path)
+}
+
+// writeMDTable writes a markdown-formatted percentile table to w.
+func writeMDTable(
+	w io.Writer,
+	typeOrder []string,
+	byType map[string][]row,
+	pcts []int,
+	valuesFn func([]row) []float64,
+	isJitter bool,
+	outlierK float64,
+) {
+	// Header
+	header := []string{"Type", "N"}
+	for _, p := range pcts {
+		switch p {
+		case 0:
+			header = append(header, "Min")
+		case 100:
+			header = append(header, "Max")
+		default:
+			header = append(header, fmt.Sprintf("P%d", p))
+		}
+	}
+	header = append(header, "Range", "P95-P05", "Mean", "SD")
+
+	fmt.Fprintln(w, "| "+strings.Join(header, " | ")+" |")
+	seps := make([]string, len(header))
+	for i := range header {
+		seps[i] = "---"
+	}
+	fmt.Fprintln(w, "| "+strings.Join(seps, " | ")+" |")
+
+	for _, typ := range typeOrder {
+		rows := byType[typ]
+		vals := valuesFn(rows)
+		if len(vals) == 0 {
+			continue
+		}
+		sort.Float64s(vals)
+		filtered, _ := filterOutliers(vals, outlierK)
+		vals = filtered
+
+		cols := []string{typ, strconv.Itoa(len(vals))}
+		for _, p := range pcts {
+			cols = append(cols, fmt.Sprintf("%.1f", percentile(vals, float64(p))))
+		}
+		rng := vals[len(vals)-1] - vals[0]
+		avg := average(vals)
+		iqr := percentile(vals, 95) - percentile(vals, 5)
+		cols = append(cols,
+			fmt.Sprintf("%.1f", rng),
+			fmt.Sprintf("%.1f", iqr),
+			fmt.Sprintf("%.1f", avg),
+			fmt.Sprintf("%.2f", stddev(vals)),
+		)
+		fmt.Fprintln(w, "| "+strings.Join(cols, " | ")+" |")
+	}
+}
+
+// otherEventTypes returns typeOrder minus the reference type, in original order.
+func otherEventTypes(typeOrder []string, ref string) []string {
+	var out []string
+	for _, t := range typeOrder {
+		if t != ref {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// csvBasename strips -events.csv (or .events.csv or .csv) from path and returns the result,
+// preserving the directory so output lands next to the input file.
+func csvBasename(path string) string {
+	base := filepath.Base(path)
+	for _, suffix := range []string{"-events.csv", ".events.csv", ".csv"} {
+		if strings.HasSuffix(base, suffix) {
+			base = strings.TrimSuffix(base, suffix)
+			break
+		}
+	}
+	return filepath.Join(filepath.Dir(path), base)
+}
+
+// sanitizeFilename replaces characters unsafe for filenames with underscores.
+func sanitizeFilename(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' || r == ' ' {
+			b.WriteRune('_')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// ── Stdout helpers ───────────────────────────────────────────────────────────
 
 func average(vals []float64) float64 {
 	n := len(vals)
@@ -108,7 +863,7 @@ func average(vals []float64) float64 {
 		panic("Cannot compute the average of a empty vector")
 	}
 	sum := 0.0
-	for _, x := range(vals) {
+	for _, x := range vals {
 		sum += x
 	}
 	return sum / float64(n)
@@ -121,10 +876,6 @@ type outlierWarning struct {
 	vals    []float64
 }
 
-// printTable writes a percentile table to stdout, followed by outlier warnings
-// and per-type histograms. outlierK is the maximum distance from the median in
-// ms; values beyond it are excluded (0 = off).
-// valuesFn extracts the sample values for a single type's rows.
 func printTable(
 	typeOrder []string,
 	byType map[string][]row,
@@ -136,7 +887,6 @@ func printTable(
 ) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	// Header
 	header := []string{"Type", "N"}
 	for _, p := range pcts {
 		if p == 0 {
@@ -150,14 +900,12 @@ func printTable(
 	header = append(header, "Range", "P95-P05", "Mean", "SD")
 	fmt.Fprintln(w, strings.Join(header, "\t"))
 
-	// Separator
 	seps := make([]string, len(header))
 	for i, h := range header {
 		seps[i] = strings.Repeat("-", len(h))
 	}
 	fmt.Fprintln(w, strings.Join(seps, "\t"))
 
-	// Collect (filtered) sorted values per type for warnings and histograms.
 	valsByType := make(map[string][]float64, len(typeOrder))
 	var warnings []outlierWarning
 
@@ -214,8 +962,6 @@ func printTable(
 	}
 }
 
-// jitterValues returns the successive differences of Onset values for a type,
-// sorted by Onset first.
 func jitterValues(rows []row) []float64 {
 	if len(rows) < 2 {
 		return nil
@@ -231,8 +977,6 @@ func jitterValues(rows []row) []float64 {
 	return diffs
 }
 
-// percentile computes the p-th percentile (0–100) of a pre-sorted slice using
-// linear interpolation (equivalent to numpy's default and R's type 7).
 func percentile(sorted []float64, p float64) float64 {
 	n := len(sorted)
 	if n == 0 {
@@ -251,7 +995,6 @@ func percentile(sorted []float64, p float64) float64 {
 	return sorted[lo]*(1-frac) + sorted[hi]*frac
 }
 
-// stddev computes the sample standard deviation (Bessel-corrected, n-1).
 func stddev(vals []float64) float64 {
 	n := len(vals)
 	if n < 2 {
@@ -270,9 +1013,6 @@ func stddev(vals []float64) float64 {
 	return math.Sqrt(sq / float64(n-1))
 }
 
-// filterOutliers removes values more than maxDist ms away from the median.
-// vals must be pre-sorted. Returns the filtered slice and the removed values.
-// When maxDist≤0, no filtering is applied.
 func filterOutliers(sorted []float64, maxDist float64) (filtered, outliers []float64) {
 	if maxDist <= 0 {
 		return sorted, nil
@@ -288,9 +1028,6 @@ func filterOutliers(sorted []float64, maxDist float64) (filtered, outliers []flo
 	return filtered, outliers
 }
 
-// pairDiffs returns onset differences (event2.Onset − event1.Onset) for each
-// event1, paired with the nearest following event2 (by Onset). If multiple
-// event1s fall before the same event2, each gets paired independently.
 func pairDiffs(allRows []row, typ1, typ2 string) []float64 {
 	var onsets1, onsets2 []float64
 	for _, r := range allRows {
@@ -309,18 +1046,15 @@ func pairDiffs(allRows []row, typ1, typ2 string) []float64 {
 
 	var diffs []float64
 	for _, t1 := range onsets1 {
-		// Binary search for the first event2 onset >= t1.
 		idx := sort.SearchFloat64s(onsets2, t1)
 		if idx >= len(onsets2) {
-			continue // no following event2
+			continue
 		}
 		diffs = append(diffs, onsets2[idx]-t1)
 	}
 	return diffs
 }
 
-// printSingleRow writes a single-row percentile table for the given label and
-// values, followed by outlier warnings and a histogram.
 func printSingleRow(label string, vals []float64, pcts []int, outlierK float64) {
 	fakeByType := map[string][]row{label: {}}
 	precomputed := make([]float64, len(vals))
@@ -330,8 +1064,6 @@ func printSingleRow(label string, vals []float64, pcts []int, outlierK float64) 
 	}, false, true, outlierK)
 }
 
-// printHistogram prints a 10-bin ASCII histogram of vals to stdout.
-// Copied from github.com/chrplr/goxpyriment/tests/internal/timingstats.
 func printHistogram(vals []float64) {
 	const nBins = 10
 	const barWidth = 40
@@ -381,7 +1113,6 @@ func printHistogram(vals []float64) {
 	}
 }
 
-// readCSV reads a single events CSV file and returns its rows.
 func readCSV(path string) ([]row, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -392,7 +1123,6 @@ func readCSV(path string) ([]row, error) {
 	r := csv.NewReader(f)
 	r.TrimLeadingSpace = true
 
-	// Read and validate header
 	header, err := r.Read()
 	if err != nil {
 		return nil, fmt.Errorf("reading header: %w", err)

@@ -163,13 +163,13 @@ transitions on the 12 input lines (4 optical, 2 microphone, 2 TTL, and
 BBTK_PORT=$(bbtk-detect-port)
 bbtk-capture -d 60
 # analyse measurements
-events-stats bbtk-capture-001.events.csv
+events-stats bbtk-capture-001-events.csv
 \end{lstlisting}
 
 At the end of the event capture, data are downloaded from the BBTK
 onto the host PC and saved for further analyses. Among the saved
 files, a \texttt{.dat} file contains the raw output of the BBTK and an
-\texttt{.events.csv} file consists of a a table with three columns:
+\texttt{-events.csv} file consists of a a table with three columns:
 \texttt{type, onset, duration}, where \texttt{type} indicates the
 sensor (\texttt{Opto1}, \texttt{Mic1}, \texttt{TTLin1}, ...
 

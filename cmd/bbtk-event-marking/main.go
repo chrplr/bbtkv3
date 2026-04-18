@@ -2,8 +2,8 @@
 //
 // Sends the PDCE / STYP / PATT / TIML sequence to the device followed by
 // the pattern rows and PCCR / RUEM to commit and run the event-marking
-// program. It then waits for the user to press 'x' and sends 'X' to the
-// device to stop it.
+// program. It then waits for the user to press Esc and sends the break
+// character to the device to stop it.
 //
 // Usage:
 //

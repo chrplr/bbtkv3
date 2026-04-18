@@ -3,25 +3,28 @@
 // LICENSE: GPL-3.0
 
 // Package main provides a command-line tool to capture events using the BlackBoxToolKit (bbtkv3).
-// It allows setting various parameters such as port address, baud rate, capture duration, and output file name.
+// It allows setting various parameters such as port address, baud rate, capture duration, and output base filename.
 // The tool also supports a debug mode and displays version information if requested.
 //
 // The main functionality includes initializing the bbtkv3 device, setting parameters, clearing internal memory,
 // capturing events, and saving the captured data to files in both raw and CSV formats.
 //
 // Usage:
+//   bbtk-capture [options] <basefilename>
+//
 //   -p string
 //         device (serial port name) (default "/dev/ttyUSB0")
 //   -b int
 //         baudrate (speed in bps) (default 115200)
 //   -d int
 //         duration of capture (in s) (default 30)
-//   -o string
-//         output file name for captured data (default "bbtk-capture.dat")
 //   -D
 //         Debug mode (default false)
 //   -V
 //         Display version
+//
+// Output files are named <basefilename>-001.dat, <basefilename>-001.dscevents.csv, etc.
+// The sequence number is incremented automatically to avoid overwriting previous recordings.
 
 // TODO: implement adjustable thresholds, reading the thresholds form the command line or from a configuration file
 // TODO: better handle errors
@@ -48,11 +51,10 @@ var (
 )
 
 var (
-	PortAddress    = "/dev/ttyUSB0"
-	Baudrate       = 115200
-	Duration       = 30
-	OutputFileName = "bbtk-capture.dat"
-	DEBUG          = false
+	PortAddress = "/dev/ttyUSB0"
+	Baudrate    = 115200
+	Duration    = 30
+	DEBUG       = false
 )
 
 var defaultSmoothingMask = bbtkv3.SmoothingMask{
@@ -69,9 +71,15 @@ func main() {
 	portPtr := flag.String("p", PortAddress, "device (serial port name)")
 	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
 	durationPtr := flag.Int("d", Duration, "duration of capture (in s)")
-	outputFilenamePtr := flag.String("o", OutputFileName, "output file name for captured data")
 	debugPtr := flag.Bool("D", DEBUG, "Debug mode")
 	versionPtr := flag.Bool("V", false, "Display version")
+	noCountdownPtr := flag.Bool("no-countdown", false, "Disable second-by-second countdown display")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] <basefilename>\n\nOptions:\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nOutput files: <basefilename>-001.dat, <basefilename>-001.dscevents.csv, <basefilename>-001.events.csv\nSequence number is incremented automatically to avoid overwriting previous recordings.\n")
+	}
 
 	flag.Parse()
 
@@ -79,6 +87,13 @@ func main() {
 		fmt.Printf("Version: %s  Build: %s\n", Version, Build[:8])
 		os.Exit(0)
 	}
+
+	if flag.NArg() != 1 {
+		fmt.Fprintf(os.Stderr, "Error: a basefilename argument is required.\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+	baseFilename := flag.Arg(0)
 
 	DEBUG = *debugPtr
 
@@ -153,7 +168,7 @@ func main() {
 	// Data Capture
 	time.Sleep(1 * time.Second)
 	fmt.Printf("Capturing events (with DSCM) for %v seconds... ", *durationPtr)
-	data, err := b.CaptureEvents(*durationPtr)
+	data, err := b.CaptureEvents(*durationPtr, *noCountdownPtr)
 	if errors.Is(err, bbtkv3.ErrCaptureAborted) {
 		fmt.Println("Capture aborted.")
 		os.Exit(0)
@@ -163,22 +178,25 @@ func main() {
 	}
 	fmt.Println("ok!")
 
-	fname, err := WriteText(*outputFilenamePtr, data)
-	if err != nil {
+	base := GetNextBase(baseFilename)
+	datFile := base + ".dat"
+	dscFile := base + "-dscevents.csv"
+	eventsFile := base + "-events.csv"
+
+	if err := os.WriteFile(datFile, []byte(data), 0644); err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Printf("Raw Data saved to %s\n", fname)
+	fmt.Printf("Raw Data saved to %s\n", datFile)
 
 	dscEvents, err := bbtkv3.CaptureOutputToEvents(data)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	efname := changeExtension(fname, "dscevents.csv")
-	err = bbtkv3.SaveDSCEventsToCSV(dscEvents, efname)
+	err = bbtkv3.SaveDSCEventsToCSV(dscEvents, dscFile)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Printf("DSC Events saved to %s\n", efname)
+	fmt.Printf("DSC Events saved to %s\n", dscFile)
 
 	// add a event with all lines set to 0 at the end of dscEvents
 	dscEvents = append(dscEvents, bbtkv3.DSCEvent{})
@@ -188,12 +206,11 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	eventsFileName := changeExtension(fname, "events.csv")
-	err = bbtkv3.SaveEventsToCSV(events, eventsFileName)
+	err = bbtkv3.SaveEventsToCSV(events, eventsFile)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Printf("Events saved to %s\n", eventsFileName)
+	fmt.Printf("Events saved to %s\n", eventsFile)
 
 	// Not necessary as defer will take care of it
 	//if err = b.Disconnect(); err != nil {

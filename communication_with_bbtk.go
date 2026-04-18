@@ -423,7 +423,7 @@ var ErrCaptureAborted = errors.New("capture aborted by user")
 //  6. Reads data from the device until the "EDAT" marker is found.
 //
 // If any command fails, an error is logged. If reading from the device fails, the function logs the error and terminates the program.
-func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
+func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool) (string, error) {
 	var err error
 	time.Sleep(time.Second)
 	err = b.SendCommand("DSCM")
@@ -459,7 +459,7 @@ func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 	// keypress detection gracefully.
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("(press 'x' to abort) ")
+		fmt.Print("(press Esc to abort) ")
 		go func() {
 			buf := make([]byte, 1)
 			for {
@@ -467,7 +467,7 @@ func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 				if err != nil || n == 0 {
 					return
 				}
-				if buf[0] == 'x' || buf[0] == 'X' {
+				if buf[0] == 27 {
 					select {
 					case abortCh <- struct{}{}:
 					default:
@@ -480,7 +480,9 @@ func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 
 	aborted := false
 	for i := int(waitingDuration.Seconds()); i > 0; i-- {
-		fmt.Printf("%d ", i)
+		if !noCountdown {
+			fmt.Printf("%d ", i)
+		}
 		select {
 		case <-abortCh:
 			aborted = true
@@ -490,7 +492,9 @@ func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 			break
 		}
 	}
-	fmt.Println()
+	if !noCountdown {
+		fmt.Println("0")
+	}
 
 	if aborted {
 		fmt.Println("Aborting: sending stop command to BBTK...")
@@ -500,7 +504,7 @@ func (b *bbtkv3) CaptureEvents(duration int) (string, error) {
 		return "", ErrCaptureAborted
 	}
 
-	fmt.Println()
+	fmt.Println("")
 	fmt.Printf("Downloading data...")
 
 	if DEBUG {
@@ -560,7 +564,7 @@ func (b *bbtkv3) EventMarking(pattern [8]string) error {
 
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("Event marking running. Press 'x' to stop.")
+		fmt.Print("Event marking running. Press Esc to stop.")
 		go func() {
 			buf := make([]byte, 1)
 			for {
@@ -568,7 +572,7 @@ func (b *bbtkv3) EventMarking(pattern [8]string) error {
 				if err != nil || n == 0 {
 					return
 				}
-				if buf[0] == 'x' || buf[0] == 'X' {
+				if buf[0] == 27 {
 					select {
 					case stopCh <- struct{}{}:
 					default:

@@ -9,9 +9,9 @@ This page describes a set of command-line tools that streamline the testing of t
 | Tool | Description |
 |------|-------------|
 | `bbtk-detect-port` | Scans serial ports to locate the connected BBTK |
-| `bbtk-capture` | Captures events for a given duration and exports them to `.dat`, `.dscevents.csv`, and `.events.csv` files |
-| `bbtk-input-check` | Streams live input state from the device (ICHK); press `x` to stop |
-| `bbtk-event-marking` | Configures and runs the command-event marking program on the device; press `x` to stop |
+| `bbtk-capture` | Captures events for a given duration and exports them to `.dat`, `-dscevents.csv`, and `-events.csv` files |
+| `bbtk-input-check` | Streams live input state from the device (ICHK); press `Esc` to stop |
+| `bbtk-event-marking` | Configures and runs the command-event marking program on the device; press `Esc` to stop |
 | `bbtk-adjust-thresholds` | Opens the interactive sensor threshold adjustment menu on the device |
 | `bbtk-get-thresholds` | Reads and prints the current sensor thresholds |
 | `bbtk-set-thresholds` | Writes eight threshold values to the device |
@@ -19,7 +19,7 @@ This page describes a set of command-line tools that streamline the testing of t
 | `bbtk-send-command` | Reads raw protocol commands from stdin, sends each to the BBTK, and prints responses to stdout |
 | `get-serial-port-list` | Lists all available serial ports on the host machine |
 | `ibbtk` | Interactive menu-driven shell — keeps a persistent connection and exposes all of the above in a nested menu |
-| `events-stats` | Computes descriptive statistics and ASCII histograms from the `.events.csv` files produced by `bbtk-capture` |
+| `events-stats` | Computes descriptive statistics, ASCII histograms, and a Markdown report with PNG histogram and timeline plots from the `-events.csv` files produced by `bbtk-capture` |
 
 
 Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
@@ -57,12 +57,12 @@ Provided the tools are in the PATH (see below), you can just type:
 $ bbtk-detect-port
 BBTK found at  COM4
 $ bbtk-adjust-thresholds -p COM4
-$ bbtk-capture -p COM4 -d 120
+$ bbtk-capture -p COM4 -d 120 session1
 ... 
 ``` 
 
-To launch a 2min acquisition. 
-When completed, `.dat` and `.events.csv` files will contain the information about detected events.
+To launch a 2-min acquisition with output files named `session1-001.dat`, `session1-001-dscevents.csv`, and `session1-001-events.csv`.
+The sequence number is incremented automatically (`-001`, `-002`, …) so previous recordings are never overwritten.
 
 
 ```bash
@@ -71,20 +71,25 @@ bbtk-capture -h
  will yield some help:
 
 ```
-Usage of bbtk-capture:
+Usage: bbtk-capture [options] <basefilename>
+
+Options:
   -D	Debug mode
   -V	Display version
   -b int
     	baudrate (speed in bps) (default 115200)
   -d int
     	duration of capture (in s) (default 30)
-  -o string
-    	output file name for captured data (default "bbtk-capture.dat")
+  -no-countdown
+    	Disable second-by-second countdown display
   -p string
     	device (serial port name) (default "/dev/ttyUSB0")
+
+Output files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefilename>-001-events.csv
+Sequence number is incremented automatically to avoid overwriting previous recordings.
 ```
 
-During the countdown, press `x` (no Enter needed) to abort the capture early. The program sends a stop command to the device and exits cleanly.
+During the countdown, press `Esc` (no Enter needed) to abort the capture early. The program sends a stop command to the device and exits cleanly.
 
 
 
@@ -212,7 +217,7 @@ Beware: When smoothing is on for a given input line, one must subtract 20ms to d
 
 | Command | Description |
 |---------|-------------|
-| `run <seconds> [output.dat]` | Clear device memory, capture for the given duration, and save `.dat`, `.dscevents.csv`, and `.events.csv` files (default output name: `ibbtk-capture.dat`) |
+| `run <seconds> [output.dat]` | Clear device memory, capture for the given duration, and save `.dat`, `-dscevents.csv`, and `-events.csv` files (default output name: `ibbtk-capture.dat`) |
 | `clear` | Erase the device timing memory |
 
 ## Example session
@@ -235,8 +240,8 @@ capture> run 30 myexp.dat
 Clearing timing data... ok
 Capturing for 30 seconds...
 Raw data saved to myexp.dat
-DSC events saved to myexp.dscevents.csv
-Events saved to myexp.events.csv (12 events detected)
+DSC events saved to myexp-dscevents.csv
+Events saved to myexp-events.csv (12 events detected)
 capture> exit
 Exiting...
 ibbtk> exit
@@ -245,7 +250,7 @@ Exiting...
 
 # bbtk-input-check — stream live input state
 
-`bbtk-input-check` sends the `ICHK` command to the device and continuously prints every line returned, showing the state of the 12 input lines (Keypad1–4, Opto1–4, TTLin1–2, Mic1–2) in real time. Press `x` (no Enter needed) to stop; the program sends the break character `X` to the device and exits.
+`bbtk-input-check` sends the `ICHK` command to the device and continuously prints every line returned, showing the state of the 12 input lines (Keypad1–4, Opto1–4, TTLin1–2, Mic1–2) in real time. Press `Esc` (no Enter needed) to stop; the program sends the break character to the device and exits.
 
 ```
 Options:
@@ -258,12 +263,11 @@ Options:
 
 ```bash
 $ bbtk-input-check -p /dev/ttyUSB0
-Streaming input state. Press 'x' to stop.
+Streaming input state. Press Esc to stop.
 000000000000;
 000000010000;
 000000000000;
 000000010000;
-x
 Stopping...
 ```
 
@@ -271,7 +275,7 @@ Each line is a 12-bit snapshot of the input ports, terminated with `;`. A `1` in
 
 # bbtk-event-marking — run the command-event marking program
 
-`bbtk-event-marking` programs the BBTK to operate in event-marking mode: it sends the `PDCE / STYP / PATT / TIML` setup sequence together with the pattern table, commits with `PCCR`, and starts execution with `RUEM`. The device then runs indefinitely, marking command events as they occur. Press `x` (no Enter needed) to stop; the program sends `X` to the device and exits.
+`bbtk-event-marking` programs the BBTK to operate in event-marking mode: it sends the `PDCE / STYP / PATT / TIML` setup sequence together with the pattern table, commits with `PCCR`, and starts execution with `RUEM`. The device then runs indefinitely, marking command events as they occur. Press `Esc` (no Enter needed) to stop; the program sends the break character to the device and exits.
 
 A one-second pause is inserted before each protocol command (matching the timing used by `bbtk-capture`) to give the device time to process each step.
 
@@ -312,108 +316,108 @@ After sending each command the tool waits up to `-timeout` seconds for the devic
 
 # events-stats — descriptive statistics on captured events
 
-`events-stats` reads one or more `.events.csv` files produced by `bbtk-capture` and prints three blocks of statistics, each followed by an ASCII histogram:
+`events-stats` reads one or more `-events.csv` files produced by `bbtk-capture` and prints three blocks of statistics to stdout, each followed by an ASCII histogram. It also writes a Markdown report (by default, named after the input file) with publication-quality PNG figures.
+
+The three blocks are:
 
 1. **Duration statistics** — distribution of event durations for each sensor channel.
-2. **Inter-onset interval (jitter) statistics** — distribution of the time between successive events of the same type. This measures the regularity (jitter) of the stimulus presentation.
-3. **Paired-event onset differences** — for each occurrence of a reference event (default: `TTLin1`), the tool finds the nearest following event of a second type (default: `Opto1`) and reports the distribution of those onset differences. This is the main measure of audio-visual latency: it tells you how long after a TTL trigger the corresponding visual or audio event was actually detected by the sensor.
+2. **Inter-onset interval (jitter) statistics** — distribution of the time between successive events of the same type, measuring stimulus regularity.
+3. **Paired-event onset differences** — for each occurrence of the reference event type (`-event1`, default `TTLin1`), the tool finds the nearest following event of every other type and reports the distribution of those onset differences. This is the main measure of latency: how long after a TTL trigger was the corresponding visual or audio event actually detected by the sensor.
 
 All time values are in milliseconds.
 
 ## Usage
 
 ```
-events-stats [-event1 TYPE] [-event2 TYPE] [-detect-outliers K] file1.events.csv [file2.events.csv ...]
+events-stats [-event1 TYPE] [-detect-outliers MS] [-no-md] file1-events.csv [file2-events.csv ...]
 ```
 
-Multiple files are pooled together before computing statistics, which is useful when you have repeated capture sessions.
+Multiple files are pooled before computing statistics, which is useful when you have repeated capture sessions.
 
 ## Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-event1 TYPE` | `TTLin1` | Reference event type for the paired-difference analysis |
-| `-event2 TYPE` | `Opto1` | Target event type for the paired-difference analysis (difference = `event2.Onset − event1.Onset`) |
-| `-detect-outliers MS` | `0` | Exclude data points more than MS milliseconds away from the median. A warning line is printed for each type where outliers are removed. Set to `0` (the default) to disable outlier filtering. |
+| `-event1 TYPE` | `TTLin1` | Reference event type; onset differences are reported for every other event type relative to this one |
+| `-detect-outliers MS` | `50` | Exclude data points more than MS milliseconds from the median (set to `0` to disable) |
+| `-no-md` | off | Skip writing the Markdown report |
+
+## Markdown report
+
+By default the tool writes `<basename>.md` alongside the input CSV, where `<basename>` is the input filename with `-events.csv` stripped. All PNG figures are saved in the same directory with the same prefix.
+
+The report contains:
+
+- Percentile tables for Duration, Jitter, and paired-event onset differences.
+- **Log-scale histograms** (log₁₀ Y axis) for each distribution — rare outlier bins remain visible even when the main peak is thousands of times taller.
+- **Timeline scatter plots** for each event type: Duration vs. onset time and SOA vs. onset time, drawn as stick plots (vertical bars from y = 0) so isolated outliers stand out clearly.
 
 ## Output format
 
-Each of the three sections contains a table with the following columns:
+Each statistics table has the following columns:
 
 | Column | Description |
 |--------|-------------|
 | `Type` | Event type (sensor channel name) |
 | `N` | Number of data points (after outlier removal) |
-| `Min` / `P10` … `P90` / `Max` | Percentiles 0 %, 10 %, … 100 % |
+| `Min` / `P5` … `P95` / `Max` | Selected percentiles |
 | `Range` | Max − Min |
-| `P99.5-P0.5` | Near-full spread (robust range) |
 | `P95-P05` | 90 % central interval |
+| `Mean` | Sample mean |
 | `SD` | Sample standard deviation (Bessel-corrected) |
 
-Below each table, a 10-bin ASCII histogram is printed for every event type. If outliers were removed, a warning line of the form
+Below each table, a 10-bin ASCII histogram is printed per event type. If outliers were removed, a warning of the form
 
 ```
 Warning: N outliers detected in TYPE (> D.DDD ms away from the median): V1, V2, ...
 ```
 
-is printed between the table and the histograms.
+is printed before the histograms.
 
 ## Example
 
 ```
-$ events-stats -event1 TTLin1 -event2 Opto1 -detect-outliers 10 bbtk-capture-001.events.csv
+$ events-stats -event1 TTLin1 -detect-outliers 10 session1-events.csv
 
 === Duration Statistics (ms) ===
 
-Type    N   Min     P10     ...  Max     Range  P99.5-P0.5  P95-P05  SD
-------  --  ------  ------  ...  ------  -----  ----------  -------  -----
-TTLin1  50   1.000   1.000  ...   1.250  0.250       0.240    0.200  0.050
-Opto1   49  513.250 513.650 ...  514.500 1.250       1.160    0.750  0.240
-Warning: 1 outliers detected in Opto1 (> 10.000 ms away from the median): -39547.750
-
-  Opto1:
-  histogram (10 bins):
-  [ 513.250,  513.375) ms :     1  **
-  [ 513.375,  513.500) ms :     0
-  ...
+Type    N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
+TTLin1  5999  5.5   21.5  21.8  21.8  22.0  22.2  54.5  49.0   0.8      21.9  0.58
+Opto1   6000  25.0  26.5  27.0  27.2  27.8  28.0  62.5  37.5   1.5      27.3  0.87
 
 === Inter-Onset Interval / Jitter Statistics (ms) ===
 
 ...
 
-=== Paired-Event Onset Differences: TTLin1 → Opto1 (ms) ===
+=== Paired-Event Onset Differences relative to TTLin1 (ms) ===
 
-Type           N   Min    P10    P50    P90    Max    Range  SD
--------------  --  -----  -----  -----  -----  -----  -----  -----
-TTLin1→Opto1   50  12.50  12.80  13.20  13.90  14.10   1.60  0.420
+Type          N     Min   P5    P50   P95   Max   Range  P95-P05  Mean  SD
+TTLin1→Opto1  5998  15.8  16.2  16.8  20.3  60.8  45.0   4.0      17.2  1.69
 
-  TTLin1→Opto1:
-  histogram (10 bins):
-  [  12.500,  12.660) ms :    3  ****
-  ...
+markdown report written to session1.md
 ```
 
 ## Pairing algorithm
 
-For each `event1` occurrence (sorted by onset time), `events-stats` locates the **nearest following** `event2` onset using binary search. Multiple `event1` events can pair with the same `event2` (non-exclusive), which handles edge cases where two triggers fire in rapid succession before the sensor responds.
+For each `event1` occurrence (sorted by onset time), `events-stats` locates the **nearest following** event of each other type using binary search. Multiple `event1` events can pair with the same target event (non-exclusive), handling cases where two triggers fire before the sensor responds.
 
 ## Typical workflow
 
 ```bash
 # 1. Record events
-bbtk-capture -p /dev/ttyUSB0 -d 60 -o session1.dat
+bbtk-capture -p /dev/ttyUSB0 -d 60 session1
 
-# 2. Inspect statistics, excluding events more than 10 ms from the median
-events-stats -detect-outliers 10 session1.events.csv
+# 2. Compute statistics and generate the Markdown report
+events-stats session1-events.csv
 
-# 3. Check TTL-to-audio latency instead
-events-stats -event1 TTLin1 -event2 Mic1 -detect-outliers 10 session1.events.csv
+# 3. Use Mic1 as the reference instead of TTLin1
+events-stats -event1 Mic1 session1-events.csv
 
-# 4. Disable outlier filtering to see raw data
-events-stats session1.events.csv
+# 4. Pool several sessions
+events-stats session1-events.csv session2-events.csv session3-events.csv
 
-# 5. Pool several sessions
-events-stats session1.events.csv session2.events.csv session3.events.csv
+# 5. Stdout only, no report files
+events-stats -no-md session1-events.csv
 ```
 
 # Troubleshooting

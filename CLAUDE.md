@@ -34,7 +34,7 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 **CLI tools (`cmd/`)**:
 | Tool | Purpose |
 |------|---------|
-| `bbtk-capture` | Main tool — records events for a given duration, writes `.dat`, `.dscevents.csv`, `.events.csv` |
+| `bbtk-capture` | Main tool — records events for a given duration, writes `.dat`, `-dscevents.csv`, `-events.csv` |
 | `bbtk-detect-port` | Scans serial ports to locate the connected BBTK |
 | `bbtk-adjust-thresholds` | Interactive threshold adjustment menu |
 | `bbtk-get-thresholds` | Reads current thresholds from device |
@@ -47,7 +47,7 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 BBTK Device (USB/serial)
   → communication_with_bbtk.go  (serial I/O, raw data)
   → events.go                   (parse + process)
-  → .dat → .dscevents.csv → .events.csv
+  → .dat → -dscevents.csv → -events.csv
 ```
 
 **Port definitions** (in `events.go`): 12 input ports (Keypad1-4, Opto1-4, TTLin1-2, Mic1-2) and 8 output ports (ActClose1-4, TTLout1-2, Sounder1-2).
