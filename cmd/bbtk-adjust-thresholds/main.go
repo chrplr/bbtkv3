@@ -50,7 +50,7 @@ var (
 
 func main() {
 
-	portPtr := flag.String("p", PortAddress, "device (serial port name)")
+	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default \""+PortAddress+"\")")
 	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
 	versionPtr := flag.Bool("V", false, "Display version")
 
@@ -61,7 +61,17 @@ func main() {
 		os.Exit(0)
 	}
 
-	b, err := bbtkv3.NewBbtkv3(*portPtr, *speedPtr, false)
+	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
+	// built-in default.
+	serPort := *portPtr
+	if serPort == "" {
+		serPort = bbtkv3.GetPortFromEnv()
+	}
+	if serPort == "" {
+		serPort = PortAddress
+	}
+
+	b, err := bbtkv3.NewBbtkv3(serPort, *speedPtr, false)
 	if err != nil {
 		log.Fatalln(err)
 	}

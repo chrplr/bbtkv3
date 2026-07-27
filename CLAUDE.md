@@ -74,7 +74,11 @@ BBTK Device (USB/serial)
 
 ## Environment Variables
 
-- `BBTK_PORT` — Serial port path, used when `-p` is not given (`-p` takes precedence). `bbtk-capture` then falls back to `/dev/ttyUSB0`; the other tools exit with an error.
+- `BBTK_PORT` — Serial port path, used when `-p` is not given (`-p` takes precedence). Read via `bbtkv3.GetPortFromEnv()` in `communication_with_bbtk.go`. Two behaviours when neither is set:
+  - Fall back to `/dev/ttyUSB0`: `bbtk-capture`, `bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds`, `bbtk-set-smoothing`.
+  - Exit with an error: `ibbtk`, `bbtk-send-command`, `bbtk-input-check`, `bbtk-event-marking`.
+
+  (`bbtk-detect-port`, `get-serial-port-list` and `events-stats` take no port and ignore the variable.)
 - `DEBUG` — Enable debug logging
 
 ## Dependencies

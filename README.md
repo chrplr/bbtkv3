@@ -85,11 +85,28 @@ Options:
   -no-countdown
     	Disable second-by-second countdown display
   -p string
-    	device (serial port name) (default "/dev/ttyUSB0")
+    	device (serial port name); overrides BBTK_PORT (default "/dev/ttyUSB0")
 
 Output files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefilename>-001-events.csv
 Sequence number is incremented automatically to avoid overwriting previous recordings.
 ```
+
+## Selecting the serial port
+
+Every tool that talks to the device accepts `-p`. If you omit it, the port is read
+from the `BBTK_PORT` environment variable, so you can set it once per session:
+
+```bash
+export BBTK_PORT=/dev/ttyUSB0          # Linux
+export BBTK_PORT=/dev/cu.usbserial-BBTKXXXX  # macOS
+set BBTK_PORT=COM4                     # Windows (cmd)
+```
+
+`-p` always takes precedence over `BBTK_PORT`. When neither is given,
+`bbtk-capture`, `bbtk-get-thresholds`, `bbtk-set-thresholds`,
+`bbtk-adjust-thresholds` and `bbtk-set-smoothing` fall back to `/dev/ttyUSB0`,
+while `ibbtk`, `bbtk-send-command`, `bbtk-input-check` and `bbtk-event-marking`
+stop with an error.
 
 During the countdown, press `Esc` (no Enter needed) to abort the capture early. The program sends a stop command to the device and exits cleanly.
 
