@@ -31,7 +31,7 @@ func main() {
 	flag.Parse()
 
 	if *versionPtr {
-		fmt.Printf("Version: %s  Build: %s\n", Version, Build)
+		fmt.Println(bbtkv3.VersionString(Version, Build))
 		os.Exit(0)
 	}
 
