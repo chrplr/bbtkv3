@@ -355,6 +355,7 @@ Multiple files are pooled before computing statistics, which is useful when you 
 | `-detect-outliers MS` | `50` | Exclude data points more than MS milliseconds from the median (set to `0` to disable) |
 | `-no-md` | off | Skip writing the Markdown report |
 | `-no-html` | off | Skip writing the HTML report |
+| `-V` | off | Print version and build, then exit |
 
 ## Markdown report
 

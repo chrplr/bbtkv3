@@ -26,10 +26,17 @@ import (
 
 	"image/color"
 
+	"github.com/chrplr/bbtkv3"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
 	"gonum.org/v1/plot/vg/draw"
+)
+
+// Variables to be passed on the compilation command line with "-X main.Version=${VERSION} -X main.Build=${BUILD}"
+var (
+	Version string
+	Build   string
 )
 
 type row struct {
@@ -43,11 +50,17 @@ func main() {
 	outlierK := flag.Float64("detect-outliers", 50, "exclude values more than this many ms away from the median (set to 0 to disable)")
 	noMD := flag.Bool("no-md", false, "skip writing the markdown report")
 	noHTML := flag.Bool("no-html", false, "skip writing the HTML report")
+	versionPtr := flag.Bool("V", false, "display version and exit")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-event1 TYPE] [-detect-outliers MS] [-no-md] <file-events.csv> [file2-events.csv ...]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-event1 TYPE] [-detect-outliers MS] [-no-md] [-no-html] <file-events.csv> [file2-events.csv ...]\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *versionPtr {
+		fmt.Println(bbtkv3.VersionString(Version, Build))
+		os.Exit(0)
+	}
 
 	if flag.NArg() < 1 {
 		flag.Usage()

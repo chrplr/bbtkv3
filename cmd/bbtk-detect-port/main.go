@@ -4,13 +4,21 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/chrplr/bbtkv3"
 	"go.bug.st/serial"
+)
+
+// Variables to be passed on the compilation command line with "-X main.Version=${VERSION} -X main.Build=${BUILD}"
+var (
+	Version string
+	Build   string
 )
 
 var (
@@ -86,6 +94,18 @@ func ScanSerialPortForBBTK(portName string, wg *sync.WaitGroup) {
 func main() {
 	var err error
 
+	versionPtr := flag.Bool("V", false, "display version and exit")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] [port ...]\n\nScans the given serial ports for a BBTK, or every available port when none is given.\n\nOptions:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	if *versionPtr {
+		fmt.Println(bbtkv3.VersionString(Version, Build))
+		os.Exit(0)
+	}
+
 	if _, ok := os.LookupEnv("DEBUG"); ok {
 		DEBUG = true
 		log.Println("DEBUG mode enabled.")
@@ -93,7 +113,7 @@ func main() {
 		DEBUG = false
 	}
 
-	portlist := os.Args[1:]
+	portlist := flag.Args()
 
 	if len(portlist) == 0 {
 		portlist, err = serial.GetPortsList()
