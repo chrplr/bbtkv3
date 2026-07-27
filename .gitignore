@@ -49,3 +49,6 @@ binaries/
 *.run.xml
 *.synctex.gz
 *.toc
+
+# Working notes, not part of the repository
+/paper/TODO.md
