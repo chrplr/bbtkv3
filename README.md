@@ -459,8 +459,15 @@ The BBTK may appear as `/dev/cu.usbserial-BBTKXXXX`. The page at <https://ftdich
 
 The source code is available at <https://github.com/chrplr/bbtkv3>
 
-To build the executable, you need the [Go development tools](https://go.dev/) (and [Git](https://git-scm.com/downloads) if you want to clone the github repository rather than downloading the src as a zip file)
+You need the [Go development tools](https://go.dev/).
 
+You can install directly with the command:
+
+```
+go install github.com/chrplr/bbtkv3
+```
+
+Alternatively, if you want to download the github repo using [Git](https://git-scm.com/downloads), you can clone it nad build the binaries:
 
 ```
 git clone https://github.com/chrplr/bbtkv3.git

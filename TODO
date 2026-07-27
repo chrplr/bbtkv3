@@ -1,6 +1,0 @@
-- improves the naming scheme of event files.
-- add commands to set thresholds and to set smoothing
-- refactor & add tests for event.go
-- robustify the case when a sensor starts or ends  'up' (ie. at 1). This crashes detect_edges()
-- (maybe) add posibility to start capture by pressing a key
-- create cmd/ibbtk, an interactive version with commands (check stuff/)
