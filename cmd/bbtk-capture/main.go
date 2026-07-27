@@ -201,8 +201,17 @@ func main() {
 	}
 	fmt.Printf("DSC Events saved to %s\n", dscFile)
 
-	// add a event with all lines set to 0 at the end of dscEvents
-	dscEvents = append(dscEvents, bbtkv3.DSCEvent{})
+	// Add an event with all lines set to 0 at the end of dscEvents, so that a
+	// port still active when the capture stopped gets a falling edge and is
+	// reported with its duration truncated to the capture window. The sentinel
+	// must carry the end-of-capture timestamp: a zero-valued DSCEvent closes
+	// those events at t=0 and yields a negative duration. Its PortStates map
+	// is left nil, which reads as 0 for every port.
+	endOfCapture := float64(*durationPtr) * 1000
+	if n := len(dscEvents); n > 0 && dscEvents[n-1].Timestamp > endOfCapture {
+		endOfCapture = dscEvents[n-1].Timestamp
+	}
+	dscEvents = append(dscEvents, bbtkv3.DSCEvent{Timestamp: endOfCapture})
 
 	events, err := bbtkv3.CaptureEventsFromDSCEvents(dscEvents)
 	if err != nil {
