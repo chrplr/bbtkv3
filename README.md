@@ -470,6 +470,41 @@ To determine which serial port the BBTK is attached toi (`/dev/ttyACM0`, `/dev/t
 The BBTK may appear as `/dev/cu.usbserial-BBTKXXXX`. The page at <https://ftdichip.com/drivers/vcp-drivers/> contains drivers for various MacOS X versions.
 
 
+## The tools cannot reach the BBTK: suspect the USB cable
+
+> [!IMPORTANT]
+> A failing USB cable does not look like a failing cable. The device still
+> enumerates far enough for the kernel to create `/dev/ttyUSB0` and bind
+> `ftdi_sio`, so it *appears* connected, and the fault is easily mistaken
+> for a bug in these tools.
+
+The cable supplied with our BBTK v3 failed this way. Replacing it with a
+standard USB-B printer cable fixed it. The symptoms were:
+
+- `sudo dmesg` reports `-32` errors (`-EPIPE`, a USB endpoint stall):
+
+      ftdi_sio ttyUSB0: failed to get modem status: -32
+      ftdi_sio ttyUSB0: usb_serial_generic_read_bulk_callback - urb stopped: -32
+
+- `/dev/ttyUSB0` exists and `ftdi_sio` is bound, so the device looks present;
+- `bbtk-detect-port` finds nothing, and writes to the port get no reply;
+- on Linux, `manufacturer`, `product` and `serial` are **missing** from
+  `/sys/bus/usb/devices/<dev>/`.
+
+That last point is the reliable tell: enumeration got through the device and
+configuration descriptors and then stalled. There was enough signal integrity
+to start enumerating, but not enough to finish.
+
+On Linux, `tools/ftdi-check.sh` performs these checks and prints a verdict:
+
+    ./tools/ftdi-check.sh              # or: ./tools/ftdi-check.sh /dev/ttyUSB1
+
+It exits 0 when the USB link is healthy — in which case the problem lies at the
+device or protocol level and debugging the tools is worthwhile — and 1 when the
+link itself is at fault, in which case **swap the USB cable before debugging
+anything else**, then try a port that is not behind a dock or a hub.
+
+
 # Compiling from source
 
 The source code is available at <https://github.com/chrplr/bbtkv3>
