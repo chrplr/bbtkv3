@@ -24,13 +24,13 @@ This page describes a set of command-line tools that streamline the testing of t
 | `events-stats` | Computes descriptive statistics, ASCII histograms, and a Markdown report with PNG histogram and timeline plots from the `-events.csv` files produced by `bbtk-capture` |
 
 
+A [paper](https://github.com/chrplr/bbtkv3/blob/main/paper/bbtkv3-paper.pdf) describes these tools. 
+
 Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
 
-The source code (under a GPL-3.0 License) at <https://github.com/chrplr/bbtkv3>
+The source code (under a GPL-3.0 License) is at <https://github.com/chrplr/bbtkv3>. Instructions for compilation are provided below.
 
 This program relies on a Go module, `github.com/chrplr/bbtkv3`, which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
-
-Read the [paper](https://github.com/chrplr/bbtkv3/blob/main/paper/bbtkv3-paper.pdf).
 
 
 # Principle of operation
@@ -46,7 +46,7 @@ To operate, three pieces of equipement are needed:
 | :point_up:  The stimulation PC and the host PC *can* be the same computer |
 |---------------------------------------------------------------------------| 
 
-As data are recorded asynchronously by the BBTKvr3, it is possible for a single PC to switch the BBTKv2 into “capture mode”, launch the stimulation program and, when done, download the timing data from the BBTKv3 memory.
+As data are recorded asynchronously by the BBTKv3, it is possible for a single PC to switch the BBTKv3 into “capture mode”, launch the stimulation program and, when done, download the timing data from the BBTKv3 memory.
 
 
 # Usage
@@ -507,16 +507,7 @@ anything else**, then try a port that is not behind a dock or a hub.
 
 # Compiling from source
 
-The source code is available at <https://github.com/chrplr/bbtkv3>
-
 You need the [Go development tools](https://go.dev/).
-
-Each tool is a separate command, so `go install` takes the path of the individual tool (the module root is a library and cannot be installed):
-
-```
-go install github.com/chrplr/bbtkv3/cmd/bbtk-capture@latest
-go install github.com/chrplr/bbtkv3/cmd/events-stats@latest
-```
 
 To install all the tools at once, use the `...` wildcard:
 
@@ -526,7 +517,8 @@ go install github.com/chrplr/bbtkv3/cmd/...@latest
 
 The binaries are placed in `$(go env GOPATH)/bin`, which must be in your `PATH`.
 
-Alternatively, if you want to download the github repo using [Git](https://git-scm.com/downloads), you can clone it and build the binaries:
+Alternatively, if you prefer, you can download the github repo  <https://github.com/chrplr/bbtkv3>
+ using [git](https://git-scm.com/downloads) and build the binaries:
 
 ```
 git clone https://github.com/chrplr/bbtkv3.git
@@ -572,11 +564,10 @@ If you use this software, please cite it as:
 
 > Pallier, C. (2026). *bbtkv3: An Open-Source Suite for Timing Measurement and Analysis with the Black Box ToolKit v3* [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.19551604
 
-That DOI is the *concept* DOI: it always resolves to the most recent release. To cite the exact version you used, use its own DOI instead — for example
+Note: that DOI is the *concept* DOI: it always resolves to the most recent release. To cite the exact version you used, use its own DOI instead — for example
 <https://doi.org/10.5281/zenodo.21620779> for v1.0.13. Every release has one, listed on the [Zenodo record](https://doi.org/10.5281/zenodo.19551604).
 
 Machine-readable metadata is in [`CITATION.cff`](CITATION.cff); GitHub's *"Cite this repository"* button renders it in APA and BibTeX.
-
 
 
 # REFERENCES
