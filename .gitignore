@@ -2,3 +2,50 @@ binaries/
 *~
 *.dat
 *.csv
+
+# Build output
+/_build/
+
+# Binaries built ad hoc at the repo root or beside their sources
+# (the Makefile puts real builds in _build/ and binaries/)
+/bbtk-adjust-thresholds
+/bbtk-capture
+/bbtk-detect-port
+/bbtk-event-marking
+/bbtk-get-thresholds
+/bbtk-input-check
+/bbtk-send-command
+/bbtk-set-smoothing
+/bbtk-set-thresholds
+/command-event-marking
+/events-stats
+/get-serial-port-list
+/ibbtk
+/cmd/bbtk-adjust-thresholds/bbtk-adjust-thresholds
+/cmd/bbtk-capture/bbtk-capture
+/cmd/bbtk-detect-port/bbtk-detect-port
+/cmd/bbtk-event-marking/bbtk-event-marking
+/cmd/bbtk-get-thresholds/bbtk-get-thresholds
+/cmd/bbtk-input-check/bbtk-input-check
+/cmd/bbtk-send-command/bbtk-send-command
+/cmd/bbtk-set-smoothing/bbtk-set-smoothing
+/cmd/bbtk-set-thresholds/bbtk-set-thresholds
+/cmd/events-stats/events-stats
+/cmd/get-serial-port-list/get-serial-port-list
+/cmd/ibbtk/ibbtk
+
+# LaTeX build artefacts
+*.aux
+*.bbl
+*.bbl-SAVE-ERROR
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
