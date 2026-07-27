@@ -47,7 +47,7 @@ type row struct {
 
 func main() {
 	event1 := flag.String("event1", "TTLin1", "reference event type; onset differences are reported for every other event type relative to this one")
-	outlierK := flag.Float64("detect-outliers", 50, "exclude values more than this many ms away from the median (set to 0 to disable)")
+	outlierK := flag.Float64("detect-outliers", 50, "exclude values more than this many ms away from the median (set to 0 to disable; skipped for a series in which it would exclude every value)")
 	noMD := flag.Bool("no-md", false, "skip writing the markdown report")
 	noHTML := flag.Bool("no-html", false, "skip writing the HTML report")
 	versionPtr := flag.Bool("V", false, "display version and exit")
@@ -1048,6 +1048,17 @@ func filterOutliers(sorted []float64, maxDist float64) (filtered, outliers []flo
 			outliers = append(outliers, v)
 		}
 	}
+
+	// Every value lies further than maxDist from the median, so there is no
+	// consensus cluster to keep. This is routine for inter-onset intervals,
+	// whose spacing is set by the experiment and is usually seconds rather
+	// than milliseconds. Returning nothing would leave callers computing
+	// statistics over an empty slice, so treat the filter as inapplicable and
+	// hand back the input untouched.
+	if len(filtered) == 0 {
+		return sorted, nil
+	}
+
 	return filtered, outliers
 }
 
