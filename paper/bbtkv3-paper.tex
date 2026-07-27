@@ -286,6 +286,59 @@ package, developers can easily integrate BBTK control directly into
 their own Go-based experimental or analysis software, e.g.,
 \parencite{goxpyrepo}.
 
+\section{Validation}
+\label{sec:validation}
+
+A timing tool is only useful if its own measurements can be trusted. We
+therefore checked that the suite recovers an interval whose true value
+is known by construction. A stimulation program running on a Raspberry
+Pi~4 alternated one frame on and two frames off on a display refreshing
+at a nominal 60~Hz, so that successive stimulus onsets are separated by
+exactly three refresh intervals, i.e. $3 \times 1000/60 = 50.000$~ms.
+The program also emitted a TTL pulse immediately after each buffer swap.
+A single \texttt{bbtk-capture} run recorded 6000 cycles, and the onset
+asynchronies were computed with \texttt{events-stats}.
+
+The measured stimulus onset asynchrony on the photodiode channel had a
+median of 50.000~ms, a mean of 49.986~ms and a standard deviation of
+0.182~ms, with all 5984 intervals falling between 49.250 and 50.500~ms.
+The TTL channel gave a median of 50.000~ms, a mean of 49.985~ms and a
+standard deviation of 0.155~ms over 5999 intervals. The suite therefore
+recovers the nominal interval exactly at the median, and the residual
+0.014~ms departure of the mean corresponds to a refresh rate of
+60.017~Hz rather than exactly 60~Hz --- a deviation of 0.03\%, which
+illustrates that the resolution of the measurement chain is fine enough
+to expose the difference between a monitor's nominal and actual refresh
+rate.
+
+% TODO: cross-validation against the vendor's Windows software.
+% The check above establishes that the suite recovers a known physical
+% interval; it does not establish agreement with the manufacturer's own
+% software, since we have no simultaneous recordings from it. Capturing
+% the same signal with both and reporting the agreement would close
+% this gap, and a reviewer is likely to ask for it.
+
+\section{Limitations}
+\label{sec:limitations}
+
+The suite implements the subset of the BBTK serial protocol
+\parencite{plant2016} needed to configure the device and to record from
+it: the capture command, the input-check and event-marking commands, and
+the commands that read and write sensor thresholds and the smoothing
+mask. It is, in its present state, an \emph{input-side} tool. Although
+the BBTK is also a signal generator, able to drive sounders, TTL outputs
+and actuator closures, none of the corresponding commands are currently
+implemented, and the suite cannot be used to generate stimuli. Users who
+need the BBTK to act as a source rather than an observer must fall back
+on the vendor's software.
+
+Two further constraints are worth noting. First, the device is driven
+over a serial protocol whose command set is documented for the BBTK
+v2 \parencite{plant2016}; commands specific to later firmware are not
+covered. Second, when smoothing is enabled on an input line, the
+durations reported by the device for that line are inflated by
+20~ms, which must be subtracted before interpretation.
+
 \section{Implementation and Availability}
 \label{sec:availability}
 
