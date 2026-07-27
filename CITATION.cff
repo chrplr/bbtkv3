@@ -16,6 +16,15 @@ keywords:
   - Black Box ToolKit
   - Go
 license: "GPL-3.0"
-version: "1.0.9"
-date-released: "2026-04-16"
+version: "1.0.13"
+date-released: "2026-07-27"
+# Concept DOI: always resolves to the most recent release.
+doi: "10.5281/zenodo.19551604"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.19551604"
+    description: "Concept DOI for all versions of bbtkv3 (resolves to the latest release)"
+  - type: doi
+    value: "10.5281/zenodo.21620779"
+    description: "DOI for version v1.0.13"
 

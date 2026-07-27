@@ -50,7 +50,7 @@
 
 ![Onset Diff – TTLin1→Opto1](bbtk-capture-004_diff_TTLin1→Opto1.png)
 
-![Onset Diff – TTLin1→Mic1](bbtk-capture-004_diff_TTLin1→Mic1.png)
+![Onset Diff – TTLin1→Mic1](bbtk-capture-004_diff_TTLin1_to_Mic1.png)
 
 ## Timeline Plots
 

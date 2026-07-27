@@ -23,7 +23,7 @@
 //   -V
 //         Display version
 //
-// Output files are named <basefilename>-001.dat, <basefilename>-001.dscevents.csv, etc.
+// Output files are named <basefilename>-001.dat, <basefilename>-001-dscevents.csv, etc.
 // The sequence number is incremented automatically to avoid overwriting previous recordings.
 
 // TODO: implement adjustable thresholds, reading the thresholds form the command line or from a configuration file
@@ -68,7 +68,7 @@ var defaultSmoothingMask = bbtkv3.SmoothingMask{
 
 func main() {
 
-	portPtr := flag.String("p", PortAddress, "device (serial port name)")
+	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default \""+PortAddress+"\")")
 	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
 	durationPtr := flag.Int("d", Duration, "duration of capture (in s)")
 	debugPtr := flag.Bool("D", DEBUG, "Debug mode")
@@ -78,7 +78,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] <basefilename>\n\nOptions:\n", os.Args[0])
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nOutput files: <basefilename>-001.dat, <basefilename>-001.dscevents.csv, <basefilename>-001.events.csv\nSequence number is incremented automatically to avoid overwriting previous recordings.\n")
+		fmt.Fprintf(os.Stderr, "\nOutput files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefilename>-001-events.csv\nSequence number is incremented automatically to avoid overwriting previous recordings.\n")
 	}
 
 	flag.Parse()
@@ -97,11 +97,14 @@ func main() {
 
 	DEBUG = *debugPtr
 
-	serPort := ""
-	if *portPtr != "" {
-		serPort = *portPtr
-	} else {
+	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
+	// built-in default.
+	serPort := *portPtr
+	if serPort == "" {
 		serPort = bbtkv3.GetPortFromEnv()
+	}
+	if serPort == "" {
+		serPort = PortAddress
 	}
 
 	// Initialisation

@@ -1,6 +1,8 @@
 Command-line interface for the Black Box ToolKit v3
 ===================================================
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19551604.svg)](https://doi.org/10.5281/zenodo.19551604)
+
 The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
  generating sounds or TTL signals.
 
@@ -97,7 +99,13 @@ During the countdown, press `Esc` (no Enter needed) to abort the capture early. 
 
 Compiled versions for MACOSX, Windows and Linux, and intel (amd64) or arm are available at <https://github.com/chrplr/bbtkv3/releases>.
 
-Get the versions for your OS and architecture, rename them to your liking (I would strip the OS-PLATFORM-VERSION), and copy them to some folder listed in the `PATH` variable of your OS. 
+Each release provides one zip archive per platform, named `bbtkv3-{os}-{arch}-{version}.zip`, containing all the tools. Download the archive for your OS and architecture and unzip it — for example:
+
+```bash
+unzip bbtkv3-linux-amd64-v1.0.13.zip
+```
+
+Inside, each binary is named `{tool}-{os}-{arch}-{version}`. Rename them to your liking (I would strip the `-OS-ARCH-VERSION` suffix), and copy them to some folder listed in the `PATH` variable of your OS. In the examples below, replace the version number with the one you downloaded.
 
 | :zap: Windows |
 |---------------|
@@ -107,9 +115,9 @@ In the command line terminal application, CMD, type:
 ```bash
 cd Downloads
 
-% rename the executable
-ren bbtk-capture-windows-arm64-1.0.1  bbtk-capture.exe
-ren bbtk-adjust-thresholds-windows-arm64-1.0.1  bbtk-adjust-thresholds.exe
+rem rename the executables
+ren bbtk-capture-windows-amd64-v1.0.13.exe  bbtk-capture.exe
+ren bbtk-adjust-thresholds-windows-amd64-v1.0.13.exe  bbtk-adjust-thresholds.exe
 ```
 
 Then copy the new`*.exe` files into a folder, say /home/user/bin, and add this folder to the system's PATH environment variable (see <https://www.eukhost.com/kb/how-to-add-to-the-path-on-windows-10-and-windows-11/>).
@@ -126,10 +134,13 @@ Assuming that you downloaded the programs in `~/Downloads` and want to install t
 ```zsh
 mkdir -p ~/bin
 cd ~/Downloads
-for f in bbtk*; do chmod +x $f; mv $f ~/bin/${f%-linux-amd64-1.0.1}; done
+for f in bbtk-* ibbtk-* events-stats-* get-serial-port-list-*; do
+    chmod +x "$f"
+    mv "$f" ~/bin/"$(echo "$f" | sed -E 's/-(darwin|linux|windows)-(amd64|arm64)-v?[0-9.]+$//')"
+done
 ```
 
-(replace the version number by the current one)
+(the `sed` expression strips the `-OS-ARCH-VERSION` suffix, whatever the version)
 
 
 | :zap: Linux |
@@ -146,13 +157,15 @@ Assuming that you downloaded the programs in `~/Downloads` and want to install t
 ```bash
 mkdir -p ~/bin
 cd ~/Downloads
-for f in bbtk*; do chmod +x $f; mv $f ~/bin/${f%-linux-amd64-1.0.1}; done
+for f in bbtk-* ibbtk-* events-stats-* get-serial-port-list-*; do
+    chmod +x "$f"
+    mv "$f" ~/bin/"$(echo "$f" | sed -E 's/-(darwin|linux|windows)-(amd64|arm64)-v?[0-9.]+$//')"
+done
 
 #run
-bbtk -p /dev/ttypACM0
+bbtk-detect-port
+bbtk-capture -p /dev/ttyACM0 -d 30 session1
 ```
-
-(replace the version number by the current one)
 # ibbtk — interactive shell
 
 `ibbtk` is an interactive menu-driven shell for communicating with the BBTKv3. Rather than running separate commands, it keeps a persistent connection open and lets you issue commands one by one.
@@ -316,7 +329,7 @@ After sending each command the tool waits up to `-timeout` seconds for the devic
 
 # events-stats — descriptive statistics on captured events
 
-`events-stats` reads one or more `-events.csv` files produced by `bbtk-capture` and prints three blocks of statistics to stdout, each followed by an ASCII histogram. It also writes a Markdown report (by default, named after the input file) with publication-quality PNG figures.
+`events-stats` reads one or more `-events.csv` files produced by `bbtk-capture` and prints three blocks of statistics to stdout, each followed by an ASCII histogram. It also writes a Markdown report *and* an HTML report (by default, named after the input file) with publication-quality PNG figures. Use `-no-md` / `-no-html` to skip either one.
 
 The three blocks are:
 
@@ -341,6 +354,7 @@ Multiple files are pooled before computing statistics, which is useful when you 
 | `-event1 TYPE` | `TTLin1` | Reference event type; onset differences are reported for every other event type relative to this one |
 | `-detect-outliers MS` | `50` | Exclude data points more than MS milliseconds from the median (set to `0` to disable) |
 | `-no-md` | off | Skip writing the Markdown report |
+| `-no-html` | off | Skip writing the HTML report |
 
 ## Markdown report
 
@@ -461,13 +475,14 @@ The source code is available at <https://github.com/chrplr/bbtkv3>
 
 You need the [Go development tools](https://go.dev/).
 
-You can install directly with the command:
+Each tool is a separate command, so `go install` takes the path of the individual tool (the module root is a library and cannot be installed):
 
 ```
-go install github.com/chrplr/bbtkv3
+go install github.com/chrplr/bbtkv3/cmd/bbtk-capture@latest
+go install github.com/chrplr/bbtkv3/cmd/events-stats@latest
 ```
 
-Alternatively, if you want to download the github repo using [Git](https://git-scm.com/downloads), you can clone it nad build the binaries:
+Alternatively, if you want to download the github repo using [Git](https://git-scm.com/downloads), you can clone it and build the binaries:
 
 ```
 git clone https://github.com/chrplr/bbtkv3.git
@@ -480,20 +495,25 @@ This will generate executables in `_build/`.
 For cross-compiling:
 
 ```bash
-./build-multiplatforms.sh X.X.X
+make dist
 ```
 
-where X.X.X is a version number
-
-The outcome will be in `binaries/`
+This builds every tool for darwin/linux/windows × amd64/arm64 and packages them into `binaries/bbtkv3-{os}-{arch}-{version}.zip`. The version is taken from the latest git tag; override it with `make dist VERSION=v1.2.3`.
 
 > [!NOTE]
-> You can set the `PLATFORMS` and `ARCHITECTURES` to target a subset of OS and ARCH, e.g.:
+> You can set `PLATFORMS` and `ARCHS` to target a subset of OS and ARCH, e.g.:
 
 ```bash
-export PLATFORMS=linux
-export ARCHITECTURES=amd64
-./build-multiplatforms.sh X.X.X
+make dist PLATFORMS=linux ARCHS=amd64
+```
+
+## Releasing
+
+Pushing a tag that starts with `v` triggers the GitHub Actions workflow in `.github/workflows/release.yml`, which runs the tests, builds the six zips and publishes them as a GitHub release:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
 ```
 
 ---
@@ -504,9 +524,14 @@ AUTHOR: Christophe Pallier <christophe@pallier.org>
 
 LICENSE: GPL-3.0
 
-If you use this software, please cite this repository as:
+If you use this software, please cite it as:
 
-> Pallier, C. (2026). bbtkv3 [Computer software]. GitHub. https://github.com/chrplr/bbtkv3
+> Pallier, C. (2026). *bbtkv3: An Open-Source Suite for Timing Measurement and Analysis with the Black Box ToolKit v3* [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.19551604
+
+That DOI is the *concept* DOI: it always resolves to the most recent release. To cite the exact version you used, use its own DOI instead — for example
+<https://doi.org/10.5281/zenodo.21620779> for v1.0.13. Every release has one, listed on the [Zenodo record](https://doi.org/10.5281/zenodo.19551604).
+
+Machine-readable metadata is in [`CITATION.cff`](CITATION.cff); GitHub's *"Cite this repository"* button renders it in APA and BibTeX.
 
 
 

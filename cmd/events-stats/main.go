@@ -843,13 +843,23 @@ func csvBasename(path string) string {
 }
 
 // sanitizeFilename replaces characters unsafe for filenames with underscores.
+// sanitizeFilename maps a display label to a portable file name. The result is
+// restricted to ASCII letters, digits, '.', '_' and '-': Go module archives
+// reject paths containing non-ASCII characters, so a committed report figure
+// named after a pair label (e.g. "TTLin1→Mic1") would make the whole module
+// impossible to `go install`.
 func sanitizeFilename(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		if r == '/' || r == '\\' || r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|' || r == ' ' {
-			b.WriteRune('_')
-		} else {
+		switch {
+		case r == '→':
+			b.WriteString("_to_")
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
 			b.WriteRune(r)
+		case r == '.' || r == '_' || r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
 		}
 	}
 	return b.String()

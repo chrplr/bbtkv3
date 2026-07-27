@@ -9,17 +9,30 @@ Command-line tools suite for the **Black Box ToolKit v3 (BBTK v3)** — a hardwa
 ## Build & Test Commands
 
 ```bash
-make build       # Build the application
+make build       # Build all 12 commands into _build/
 make test        # Run tests (verbose)
-make all         # Build, test, and clean
-make clean       # Remove binaries
+make all         # Build, then test
+make clean       # Remove _build/ and binaries/
 go test ./...    # Run all tests directly
 ```
 
-**Cross-platform builds** (outputs to `binaries/` as `{cmd}-{os}-{arch}-{version}`):
+**Cross-platform distribution** (outputs to `binaries/` as `bbtkv3-{os}-{arch}-{version}.zip`, one zip per platform holding all 12 binaries):
 ```bash
-./build-multiplatforms.sh 1.2.3    # Build for all platforms/architectures
+make dist                 # darwin/linux/windows × amd64/arm64
+make dist VERSION=v1.2.3  # override the version (defaults to `git describe --tags --abbrev=0`)
 ```
+
+`VERSION` and the short git hash are injected via `-ldflags` into `main.Version` / `main.Build` of every command. The build is pure Go (no cgo), so all six targets cross-compile from any host.
+
+## Releases
+
+Pushing a tag matching `v*` triggers `.github/workflows/release.yml`, which runs the tests, builds the six zips, and publishes a GitHub release with auto-generated notes:
+
+```bash
+git tag v1.2.3 && git push origin v1.2.3
+```
+
+`make release` does the same thing locally via `gh` — use it only to backfill a tag that predates the workflow. Note the workflow passes `VERSION` explicitly from the tag name, because `actions/checkout` makes a shallow clone in which the Makefile's `git describe` would yield `dev`.
 
 ## Architecture
 
@@ -41,6 +54,13 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 | `bbtk-set-thresholds` | Writes 8 threshold values to device |
 | `bbtk-set-smoothing` | Configures sensor smoothing |
 | `get-serial-port-list` | Lists available serial ports |
+| `ibbtk` | Interactive menu-driven shell (thresholds, smoothing, capture sub-menus) |
+| `events-stats` | Offline analysis of `-events.csv`: duration/jitter/onset-difference percentiles; no device needed |
+| `bbtk-send-command` | Pipes raw commands from stdin to the device and prints responses |
+| `bbtk-event-marking` | Sends the PDCE/STYP/PATT/TIML sequence to run an event-marking program |
+| `bbtk-input-check` | Streams live input state (`ICHK`) until Esc |
+
+The canonical list is `CMDS` in the Makefile — keep it in sync when adding a command under `cmd/`.
 
 **Data flow**:
 ```
@@ -54,9 +74,14 @@ BBTK Device (USB/serial)
 
 ## Environment Variables
 
-- `BBTK_PORT` — Serial port path (overrides `-p` flag)
+- `BBTK_PORT` — Serial port path, used when `-p` is not given (`-p` takes precedence). `bbtk-capture` then falls back to `/dev/ttyUSB0`; the other tools exit with an error.
 - `DEBUG` — Enable debug logging
 
-## Key Dependency
+## Dependencies
 
-`go.bug.st/serial v1.6.2` — the sole external library for serial communication.
+- `go.bug.st/serial` — serial communication, used by the root library.
+- `golang.org/x/term` — raw-mode key reading, in `communication_with_bbtk.go` and `bbtk-input-check`.
+- `gonum.org/v1/plot` — plots in `events-stats` (by far the heaviest dependency).
+- `github.com/turret-io/go-menu` — menu shell in `ibbtk`.
+
+Only the first is listed as a direct require in `go.mod`; the others are marked `// indirect` despite being imported directly, so a `go mod tidy` will reclassify them.
