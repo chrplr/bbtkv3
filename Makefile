@@ -69,8 +69,8 @@ $(foreach p,$(PLATFORMS),$(foreach a,$(ARCHS),$(eval $(call build_zip,$(p),$(a))
 # ── GitHub release ────────────────────────────────────────────────────────────
 
 release: dist
-	gh release create v$(VERSION) $(ZIPS) \
-	    --title "v$(VERSION)" \
+	gh release create $(VERSION) $(ZIPS) \
+	    --title "$(VERSION)" \
 	    --generate-notes
 
 .PHONY: all build test clean dist release
