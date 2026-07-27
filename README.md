@@ -483,6 +483,14 @@ go install github.com/chrplr/bbtkv3/cmd/bbtk-capture@latest
 go install github.com/chrplr/bbtkv3/cmd/events-stats@latest
 ```
 
+To install all the tools at once, use the `...` wildcard:
+
+```
+go install github.com/chrplr/bbtkv3/cmd/...@latest
+```
+
+The binaries are placed in `$(go env GOPATH)/bin`, which must be in your `PATH`.
+
 Alternatively, if you want to download the github repo using [Git](https://git-scm.com/downloads), you can clone it and build the binaries:
 
 ```
