@@ -83,7 +83,7 @@ func main() {
 	// built-in default.
 	serPort := *portPtr
 	if serPort == "" {
-		serPort = bbtkv3.GetPortFromEnv()
+		serPort = bbtkv3.ResolvePort()
 	}
 	if serPort == "" {
 		serPort = PortAddress

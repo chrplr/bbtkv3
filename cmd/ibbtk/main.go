@@ -43,7 +43,7 @@ func main() {
 
 	port := *portPtr
 	if port == "" {
-		port = bbtkv3.GetPortFromEnv()
+		port = bbtkv3.ResolvePort()
 	}
 	if port == "" {
 		log.Fatal("no serial port specified: use -p <port> or set BBTK_PORT")

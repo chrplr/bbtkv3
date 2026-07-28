@@ -12,7 +12,7 @@ import (
 	"strconv"
 
 	"os"
-	//"path/filepath"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -53,6 +53,38 @@ func GetPortFromEnv() string {
 	} else {
 		return ""
 	}
+}
+
+// bbtkByIDGlob matches the udev by-id symlink the BBTK presents on Linux, e.g.
+// /dev/serial/by-id/usb-BBTK_BBTK_BBTK_V3_BBTKBBTKV3-if00-port0. On platforms
+// without /dev/serial/by-id the glob simply matches nothing.
+const bbtkByIDGlob = "/dev/serial/by-id/*BBTK*"
+
+// ResolvePort returns the serial port to talk to, or "" if it cannot tell.
+//
+// Order: BBTK_PORT, then the by-id symlink. The latter is derived from the
+// device's USB descriptors, so unlike /dev/ttyUSBn — which is handed out in
+// enumeration order — it survives replugging and power-cycling the box. That
+// matters in practice: numbering shifts exactly when you have just rebooted a
+// wedged device and least want to go hunting for its new name.
+//
+// Preferred over scanning (as bbtk-detect-port does), which has to open every
+// serial port and send CONN to it, disturbing whatever else is attached.
+//
+// Callers keep their own final fallback, so behaviour is unchanged when neither
+// source yields anything.
+func ResolvePort() string {
+	if p := GetPortFromEnv(); p != "" {
+		return p
+	}
+	matches, err := filepath.Glob(bbtkByIDGlob)
+	if err != nil || len(matches) == 0 {
+		return ""
+	}
+	if len(matches) > 1 && verbose {
+		fmt.Printf("note: %d BBTK devices found, using %s\n", len(matches), matches[0])
+	}
+	return matches[0]
 }
 
 // NewBbtkv3 creates a new bbtkv3 object, connecting to the serial device at portAddress.
@@ -526,20 +558,24 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 	elapsed := time.Since(startedAt).Seconds()
 
 	if aborted {
-		fmt.Println("\nStopping capture early: sending break to the BBTK,")
-		fmt.Println("then waiting up to 10 s for it to return what it recorded...")
+		// An interrupted capture is lost. The BBTK holds its timing data in
+		// internal RAM and only streams it when the programmed TIML window
+		// completes; there is no command that stops a run early and still hands
+		// back what has been recorded so far. Stopping is therefore worth doing
+		// only to leave the device idle and ready for the next capture — never
+		// to salvage data — so this deliberately does not try to download.
+		//
+		// That is also why the capture duration must be worked out in advance:
+		// a run that turns out too short cannot be extended, and one that is
+		// interrupted has to be repeated from the start.
+		fmt.Println("\nStopping capture: sending break to the BBTK...")
 		if err := b.SendBreakChar(); err != nil {
 			log.Printf("CaptureEvents: SendBreakChar: %v", err)
 		}
-		// Try to recover what was recorded. Whether the device streams its
-		// buffer after a break is not guaranteed, so this read is bounded: give
-		// up if nothing arrives for 10 s rather than hanging.
-		data, rerr := b.readCaptureData(10 * time.Second)
-		if rerr != nil || !strings.Contains(data, "EDAT") {
-			return "", elapsed, ErrCaptureAborted
-		}
-		fmt.Printf("Recovered %.1f s of data.\n", elapsed)
-		return data, elapsed, nil
+		// Drain briefly so any bytes the device emits in response do not sit in
+		// the buffer and confuse the next session's handshake. Discarded.
+		b.drainPort(2 * time.Second)
+		return "", elapsed, ErrCaptureAborted
 	}
 
 	fmt.Println("")
@@ -558,6 +594,26 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 	}
 
 	return data, float64(duration), nil
+}
+
+// drainPort reads and discards whatever the device emits, until it has been
+// quiet for the given period. Used after stopping a capture, so that stray
+// bytes do not sit in the buffer and desynchronise the next session's
+// handshake.
+func (b *bbtkv3) drainPort(quiet time.Duration) {
+	buff := make([]byte, 1024)
+	var idle time.Duration
+	for idle < quiet {
+		n, err := b.port.Read(buff)
+		if err != nil {
+			return
+		}
+		if n == 0 {
+			idle += time.Second // one port read timeout elapsed
+			continue
+		}
+		idle = 0
+	}
 }
 
 // readCaptureData reads from the device until the EDAT terminator.

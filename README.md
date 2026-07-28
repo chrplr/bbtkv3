@@ -145,23 +145,37 @@ gated behind `BBTK_CAPTURE=1`.
 
 ## Interrupting a capture
 
-`bbtk-capture` traps `SIGINT` (Ctrl-C) and `SIGTERM`. On either it stops the
-capture, asks the device for what it recorded, and writes the usual three output
-files from that — a truncated recording rather than none. The end-of-capture
-timestamp reflects the time actually recorded, not the `-d` value, so events
-still active at the stop are not reported with inflated durations.
+**An interrupted capture is lost.** The BBTK holds its timing data in internal
+RAM and streams it only when the programmed `TIML` window completes; there is no
+command that stops a run early and still returns what has been recorded so far.
+Stopping is therefore worth doing only to leave the device idle and ready for the
+next capture — never to salvage data.
 
-Recovery is best-effort: it waits up to 10 s for the device to return its buffer
-after the break. If nothing arrives, it says so and exits non-zero rather than
-pretending the run succeeded — the recording is then still in the device's RAM
-and will be cleared by the next capture. A second Ctrl-C force-quits.
+`bbtk-capture` traps `SIGINT` (Ctrl-C) and `SIGTERM`, and Esc does the same when
+stdin is a terminal. On any of them it sends the break, drains the port so stray
+bytes do not desynchronise the next session, reports that the recording is gone,
+and exits non-zero. It does not pretend to have saved anything.
 
-Pressing Esc during a capture does the same thing (only when stdin is a
-terminal).
+The practical consequence: **work out the capture duration in advance.** A run
+that turns out too short cannot be extended, and one that is interrupted has to
+be repeated from the start.
 
 ## Selecting the serial port
 
-Every tool that talks to the device accepts `-p`. If you omit it, the port is read
+Every tool resolves the port in this order: the `-p` flag, then `BBTK_PORT`, then
+the udev by-id symlink `/dev/serial/by-id/*BBTK*`, then its own built-in default.
+
+The by-id name is derived from the device's USB descriptors, so — unlike
+`/dev/ttyUSBn`, which is handed out in enumeration order — it survives replugging
+and power-cycling. In practice the numbering shifts exactly when you have just
+rebooted a wedged box and least want to hunt for its new name, so leaving `-p`
+and `BBTK_PORT` unset is usually the most reliable option on Linux.
+
+`bbtk-detect-port` remains available and works anywhere, but it identifies the
+device by opening every serial port and sending `CONN`, which disturbs whatever
+else is attached.
+
+The older description follows. If you omit `-p`, the port is read
 from the `BBTK_PORT` environment variable, so you can set it once per session:
 
 ```bash
