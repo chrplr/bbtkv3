@@ -87,6 +87,11 @@ func main() {
 
 	if *versionPtr {
 		fmt.Println(bbtkv3.VersionString(Version, Build))
+		// Advertise the synchronisation marker, so a wrapper script can check
+		// for handshake support without touching the device. A binary built
+		// before the marker existed simply never prints it during a capture,
+		// which strands the caller waiting for a line that will never come.
+		fmt.Printf("ready-marker: %s\n", bbtkv3.ReadyMarker)
 		os.Exit(0)
 	}
 

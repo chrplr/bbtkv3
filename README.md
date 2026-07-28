@@ -111,6 +111,16 @@ internal-memory erase whose duration depends on whether the box needs a full
 format (`FRMT;`) or only an erase of used sectors (`ESEC;`). That variability is
 why a script must wait for the marker rather than sleeping a fixed amount.
 
+A wrapper can check for handshake support before touching the device: `-V`
+advertises the marker, so a binary predating it is caught immediately instead of
+stranding the caller for the whole ready-timeout.
+
+```bash
+$ bbtk-capture -V
+Version: v1.0.18  Build: 9de6879
+ready-marker: BBTK-CAPTURE-READY
+```
+
 A minimal wrapper:
 
 ```bash
