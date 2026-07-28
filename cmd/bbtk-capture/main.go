@@ -39,6 +39,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/chrplr/bbtkv3"
@@ -168,18 +170,42 @@ func main() {
 	}
 	fmt.Println("Ok")
 
+	// Stop cleanly on Ctrl-C or SIGTERM instead of dying with the recording
+	// still in the device's RAM and nothing written to disk. The capture is
+	// cut short, the device is asked for whatever it has, and the files below
+	// are written from that — a truncated recording beats no recording at all.
+	//
+	// Only the FIRST signal is handled; the goroutine then returns and
+	// signal.Notify's registration no longer has a reader, so a second Ctrl-C
+	// force-quits in the usual way if the recovery read is taking too long.
+	abort := make(chan struct{}, 1)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		select {
+		case abort <- struct{}{}:
+		default:
+		}
+	}()
+
 	// Data Capture
 	time.Sleep(1 * time.Second)
 	fmt.Printf("Capturing events (with DSCM) for %v seconds... ", *durationPtr)
-	data, err := b.CaptureEvents(*durationPtr, *noCountdownPtr)
+	data, elapsedS, err := b.CaptureEvents(*durationPtr, *noCountdownPtr, abort)
 	if errors.Is(err, bbtkv3.ErrCaptureAborted) {
-		fmt.Println("Capture aborted.")
-		os.Exit(0)
+		fmt.Println("Capture stopped early and the device returned no data.")
+		fmt.Println("The recording is still in the BBTK's RAM; it will be cleared by the next capture.")
+		os.Exit(1)
 	}
 	if err != nil {
 		log.Fatalf("CaptureEvents: %v\n", err)
 	}
-	fmt.Println("ok!")
+	if elapsedS < float64(*durationPtr)-1 {
+		fmt.Printf("ok! (stopped early: %.1f s of the %d s requested)\n", elapsedS, *durationPtr)
+	} else {
+		fmt.Println("ok!")
+	}
 
 	base := GetNextBase(baseFilename)
 	datFile := base + ".dat"
@@ -207,7 +233,10 @@ func main() {
 	// must carry the end-of-capture timestamp: a zero-valued DSCEvent closes
 	// those events at t=0 and yields a negative duration. Its PortStates map
 	// is left nil, which reads as 0 for every port.
-	endOfCapture := float64(*durationPtr) * 1000
+	// Use the time actually recorded, not the requested duration: after an early
+	// stop they differ, and closing a still-active port at the requested end
+	// would report a duration longer than the capture itself.
+	endOfCapture := elapsedS * 1000
 	if n := len(dscEvents); n > 0 && dscEvents[n-1].Timestamp > endOfCapture {
 		endOfCapture = dscEvents[n-1].Timestamp
 	}

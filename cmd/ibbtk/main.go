@@ -196,7 +196,9 @@ func main() {
 					fmt.Println("ok")
 
 					fmt.Printf("Capturing for %d seconds...\n", seconds)
-					data, err := b.CaptureEvents(seconds, false)
+					// nil abort channel: the interactive shell offers no way to
+					// stop a capture other than Esc, which CaptureEvents handles.
+					data, _, err := b.CaptureEvents(seconds, false, nil)
 					if err != nil {
 						fmt.Printf("capture error: %v\n", err)
 						return nil

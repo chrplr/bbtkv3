@@ -402,28 +402,45 @@ var DefaultEventMarkingPattern = [8]string{
 	"99999999999999999999,9999999999999999",
 }
 
-// ErrCaptureAborted is returned by CaptureEvents when the user presses 'x' to abort.
-var ErrCaptureAborted = errors.New("capture aborted by user")
+// ErrCaptureAborted is returned by CaptureEvents when a capture was stopped
+// early AND no data could be recovered from the device. A capture that was
+// stopped early but did yield data returns that data with a nil error and an
+// elapsed time shorter than the requested duration — callers should save it.
+var ErrCaptureAborted = errors.New("capture aborted; no data recovered from the device")
 
-// CaptureEvents captures events for a specified duration.
-// It sends a series of commands to the device and reads the data until the "EDAT" marker is found.
+// ReadyMarker is printed on stdout, on its own line, at the exact moment the
+// device starts recording. It is the synchronisation point for an external
+// stimulus program: a wrapper script launches bbtk-capture in the background,
+// blocks until this line appears, and only then starts the stimulus.
+//
+// Nothing else in the output identifies that instant. The "Capturing events…"
+// message a caller prints beforehand lands ~5.7 s early, because CaptureEvents
+// still has DSCM/TIML/duration/RUDS and their pacing sleeps to go.
+const ReadyMarker = "BBTK-CAPTURE-READY"
+
+// CaptureEvents records events on the device for a specified duration.
 //
 // Parameters:
-//   - duration: The duration in seconds for which events should be captured.
+//   - duration: seconds to record. The DEVICE enforces this (it is sent as the
+//     TIML argument); the host merely waits it out.
+//   - noCountdown: suppress the per-second countdown on stdout.
+//   - abort: optional; closing or sending on this channel stops the capture
+//     early, as does pressing Esc when stdin is a terminal. Pass nil for none.
 //
-// Returns:
-//   - A string containing the captured event data.
+// Returns the raw device text (SDAT … EDAT), the number of seconds actually
+// recorded, and an error.
+//
+// On an early stop the elapsed value is the true recording window, which is
+// shorter than duration. Callers MUST use it rather than the requested duration
+// when timestamping the end of the capture, or events still active at the stop
+// are closed at the wrong time and their durations come out stretched.
 //
 // The function performs the following steps:
-//  1. Sends the "DSCM" command to the device.
-//  2. Sends the "TIML" command to the device.
-//  3. Sends the duration (in microseconds) to the device.
-//  4. Sends the "RUDS" command to the device.
-//  5. Waits for the specified duration minus one second.
-//  6. Reads data from the device until the "EDAT" marker is found.
-//
-// If any command fails, an error is logged. If reading from the device fails, the function logs the error and terminates the program.
-func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool) (string, error) {
+//  1. Sends "DSCM", "TIML" and the duration (in microseconds) to the device.
+//  2. Sends "RUDS" — recording starts here — and prints ReadyMarker.
+//  3. Waits out the duration, watching for Esc or the abort channel.
+//  4. Reads data from the device until the "EDAT" marker is found.
+func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan struct{}) (string, float64, error) {
 	var err error
 	time.Sleep(time.Second)
 	err = b.SendCommand("DSCM")
@@ -449,14 +466,22 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool) (string, error) {
 	if err != nil {
 		log.Printf("CaptureEvents: RUDS %v", err)
 	}
+	startedAt := time.Now()
+
+	// The device is recording from this instant. Printed unconditionally — not
+	// gated on verbose, and not on stdin being a terminal — because an external
+	// program synchronises on it. The leading newline closes the caller's
+	// progress message, which is deliberately left open.
+	fmt.Printf("\n%s duration=%d\n", ReadyMarker, duration)
 
 	waitingDuration := time.Duration(duration-1) * time.Second
 
 	abortCh := make(chan struct{}, 1)
 
-	// Put terminal in raw mode so 'x' is detected immediately without Enter.
-	// If stdin is not a terminal (e.g. piped), MakeRaw will fail and we skip
-	// keypress detection gracefully.
+	// Put terminal in raw mode so Esc is detected immediately without Enter.
+	// If stdin is not a terminal (e.g. piped, or </dev/null under a wrapper
+	// script), MakeRaw fails and we skip keypress detection gracefully — the
+	// abort channel is then the only way to stop early.
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
 		fmt.Print("(press Esc to abort) ")
@@ -486,6 +511,8 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool) (string, error) {
 		select {
 		case <-abortCh:
 			aborted = true
+		case <-abort:
+			aborted = true
 		case <-time.After(time.Second):
 		}
 		if aborted {
@@ -496,12 +523,23 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool) (string, error) {
 		fmt.Println("0")
 	}
 
+	elapsed := time.Since(startedAt).Seconds()
+
 	if aborted {
-		fmt.Println("Aborting: sending stop command to BBTK...")
+		fmt.Println("\nStopping capture early: sending break to the BBTK,")
+		fmt.Println("then waiting up to 10 s for it to return what it recorded...")
 		if err := b.SendBreakChar(); err != nil {
 			log.Printf("CaptureEvents: SendBreakChar: %v", err)
 		}
-		return "", ErrCaptureAborted
+		// Try to recover what was recorded. Whether the device streams its
+		// buffer after a break is not guaranteed, so this read is bounded: give
+		// up if nothing arrives for 10 s rather than hanging.
+		data, rerr := b.readCaptureData(10 * time.Second)
+		if rerr != nil || !strings.Contains(data, "EDAT") {
+			return "", elapsed, ErrCaptureAborted
+		}
+		fmt.Printf("Recovered %.1f s of data.\n", elapsed)
+		return data, elapsed, nil
 	}
 
 	fmt.Println("")
@@ -511,23 +549,49 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool) (string, error) {
 		fmt.Println("Waiting for data...")
 	}
 
+	// The device is about to stream, so a long idle gap here means something is
+	// wrong rather than merely slow; 30 s is generous for that. The bound is on
+	// idle time, not total transfer, so a large capture is not cut short.
+	data, rerr := b.readCaptureData(30 * time.Second)
+	if rerr != nil {
+		return "", elapsed, rerr
+	}
+
+	return data, float64(duration), nil
+}
+
+// readCaptureData reads from the device until the EDAT terminator.
+//
+// idleTimeout bounds how long it waits with NO bytes arriving; the total
+// transfer may legitimately take much longer on a long capture, so the bound is
+// deliberately on idle time. A zero idleTimeout waits indefinitely. The serial
+// port carries a 1 s read timeout (set in New), which surfaces as a zero-length
+// read rather than an error, and is what makes the idle accounting work.
+func (b *bbtkv3) readCaptureData(idleTimeout time.Duration) (string, error) {
 	text := ""
 	buff := make([]byte, 1024)
+	var idle time.Duration
 	for {
 		n, err := b.port.Read(buff)
 		if err != nil {
-			return "", fmt.Errorf("CaptureEvents: %w", err)
+			return text, fmt.Errorf("readCaptureData: %w", err)
 		}
-		if n > 0 {
-			text += string(buff[:n])
+		if n == 0 {
+			idle += time.Second // one port read timeout elapsed
+			if idleTimeout > 0 && idle >= idleTimeout {
+				return text, fmt.Errorf("readCaptureData: no data from the device for %v", idleTimeout)
+			}
+			continue
 		}
-		if strings.Contains(string(buff), "EDAT") {
-			break
+		idle = 0
+		text += string(buff[:n])
+		// Check the accumulated text, not the current buffer: EDAT can straddle
+		// two reads, and an unrewritten tail of buff would otherwise match
+		// spuriously and truncate the download.
+		if strings.Contains(text, "EDAT") {
+			return text, nil
 		}
 	}
-
-	return text, nil
-
 }
 
 // EventMarking sends the event-marking program to the BBTK and runs it until
