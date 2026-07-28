@@ -91,6 +91,64 @@ Output files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefil
 Sequence number is incremented automatically to avoid overwriting previous recordings.
 ```
 
+## Driving a capture from a script
+
+`bbtk-capture` prints a line on stdout, on its own line, at the exact moment the
+device starts recording:
+
+```
+BBTK-CAPTURE-READY duration=120
+```
+
+This is the synchronisation point for running a stimulus program alongside the
+capture on the same machine. Nothing earlier in the output identifies that
+instant: the `Capturing events (with DSCM) for N seconds...` message is printed
+roughly 5.7 s **before** recording begins, because the `DSCM` / `TIML` / duration
+/ `RUDS` sequence and its pacing sleeps still have to run.
+
+Startup takes 11–40 s in total — a fixed floor of command pacing, plus an
+internal-memory erase whose duration depends on whether the box needs a full
+format (`FRMT;`) or only an erase of used sectors (`ESEC;`). That variability is
+why a script must wait for the marker rather than sleeping a fixed amount.
+
+A minimal wrapper:
+
+```bash
+bbtk-capture -d 120 -no-countdown session1 </dev/null >capture.log 2>&1 &
+BBTK_PID=$!
+until grep -q BBTK-CAPTURE-READY capture.log; do
+    kill -0 $BBTK_PID 2>/dev/null || { echo "capture died"; exit 1; }
+    sleep 1
+done
+./my-stimulus-program          # runs inside the capture window
+wait $BBTK_PID                 # files are written when bbtk-capture exits
+```
+
+Redirect stdin from `/dev/null`. `bbtk-capture` puts the terminal into raw mode
+to watch for Esc, and that terminal is shared with the stimulus program; with
+stdin closed the raw-mode call fails harmlessly and the stimulus keeps its own
+input handling.
+
+`tests/Timing-Tests/run-timing-tests.sh` in the
+[goxpyriment](https://github.com/chrplr/goxpyriment) repository implements this,
+gated behind `BBTK_CAPTURE=1`.
+
+## Interrupting a capture
+
+`bbtk-capture` traps `SIGINT` (Ctrl-C) and `SIGTERM`. On either it stops the
+capture, asks the device for what it recorded, and writes the usual three output
+files from that — a truncated recording rather than none. The end-of-capture
+timestamp reflects the time actually recorded, not the `-d` value, so events
+still active at the stop are not reported with inflated durations.
+
+Recovery is best-effort: it waits up to 10 s for the device to return its buffer
+after the break. If nothing arrives, it says so and exits non-zero rather than
+pretending the run succeeded — the recording is then still in the device's RAM
+and will be cleared by the next capture. A second Ctrl-C force-quits.
+
+Pressing Esc during a capture does the same thing (only when stdin is a
+terminal).
+
 ## Selecting the serial port
 
 Every tool that talks to the device accepts `-p`. If you omit it, the port is read
