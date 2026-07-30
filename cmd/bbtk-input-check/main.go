@@ -83,14 +83,16 @@ func main() {
 	// Use raw terminal mode so no Enter is required.
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("Streaming input state. Press Esc to stop.")
+		fmt.Print("Streaming input state. Press Esc or Ctrl-C to stop.")
 		buf := make([]byte, 1)
 		for {
 			n, err := os.Stdin.Read(buf)
 			if err != nil || n == 0 {
 				break
 			}
-			if buf[0] == 27 {
+			// Ctrl-C (3) as well as Esc: raw mode clears ISIG, so Ctrl-C never
+			// reaches a signal handler and would otherwise be discarded here.
+			if buf[0] == 27 || buf[0] == 3 {
 				break
 			}
 		}

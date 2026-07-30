@@ -450,6 +450,17 @@ var ErrCaptureAborted = errors.New("capture aborted; no data recovered from the 
 // still has DSCM/TIML/duration/RUDS and their pacing sleeps to go.
 const ReadyMarker = "BBTK-CAPTURE-READY"
 
+// Bytes that request a stop from a terminal held in raw mode. Esc is the
+// documented key; Ctrl-C must be handled here as well because term.MakeRaw
+// clears ISIG, so Ctrl-C is delivered as this byte rather than raising SIGINT.
+// Without it the reader below discards Ctrl-C silently and the process has no
+// keyboard escape at all — a SIGINT handler in main() never fires either,
+// because no signal is ever generated.
+const (
+	keyEsc   = 27
+	keyCtrlC = 3
+)
+
 // CaptureEvents records events on the device for a specified duration.
 //
 // Parameters:
@@ -516,7 +527,7 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 	// abort channel is then the only way to stop early.
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("(press Esc to abort) ")
+		fmt.Print("(press Esc or Ctrl-C to abort) ")
 		go func() {
 			buf := make([]byte, 1)
 			for {
@@ -524,7 +535,7 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 				if err != nil || n == 0 {
 					return
 				}
-				if buf[0] == 27 {
+				if buf[0] == keyEsc || buf[0] == keyCtrlC {
 					select {
 					case abortCh <- struct{}{}:
 					default:
@@ -684,7 +695,7 @@ func (b *bbtkv3) EventMarking(pattern [8]string) error {
 
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("Event marking running. Press Esc to stop.")
+		fmt.Print("Event marking running. Press Esc or Ctrl-C to stop.")
 		go func() {
 			buf := make([]byte, 1)
 			for {
@@ -692,7 +703,7 @@ func (b *bbtkv3) EventMarking(pattern [8]string) error {
 				if err != nil || n == 0 {
 					return
 				}
-				if buf[0] == 27 {
+				if buf[0] == keyEsc || buf[0] == keyCtrlC {
 					select {
 					case stopCh <- struct{}{}:
 					default:
