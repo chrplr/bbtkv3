@@ -73,7 +73,7 @@ bbtk-capture -h
  will yield some help:
 
 ```
-Usage: bbtk-capture [options] <basefilename>
+Usage: bbtk-capture [options] <basefilename> [-- command [args...]]
 
 Options:
   -D	Debug mode
@@ -89,30 +89,73 @@ Options:
 
 Output files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefilename>-001-events.csv
 Sequence number is incremented automatically to avoid overwriting previous recordings.
+
+Anything after -- is run as a child process, started the instant the device
+begins recording. Progress then moves to stderr so stdout carries only the
+child's output. A child that exits non-zero aborts the capture.
 ```
 
-## Driving a capture from a script
+## Running a stimulus inside the capture window
 
-`bbtk-capture` prints a line on stdout, on its own line, at the exact moment the
-device starts recording:
+A stimulus has to start *after* the device is recording and finish *before* the
+window closes. Startup takes 11–40 s — a fixed floor of command pacing, plus an
+internal-memory erase whose duration depends on whether the box needs a full
+format (`FRMT;`) or only an erase of used sectors (`ESEC;`) — so that instant
+cannot be predicted, only waited for.
+
+The simplest way is to let `bbtk-capture` start the stimulus itself. Everything
+after `--` is its argv:
+
+```bash
+bbtk-capture -d 120 session1 -- ./my-stimulus-program -cycles 1000
+```
+
+No shell is involved, so there are no quoting rules and a stimulus flag such as
+`-d` cannot be mistaken for one of `bbtk-capture`'s.
+
+In this mode:
+
+- **Progress moves to stderr**, so stdout carries only the stimulus's own output.
+  `2>capture.log >results.txt` keeps the two apart; the stimulus's *stderr* is
+  inherited and so joins the capture log.
+- **The countdown and the Esc/Ctrl-C handler are off.** The terminal belongs to
+  the stimulus: raw mode would clear `ISIG` and `ONLCR` for it too, costing it
+  Ctrl-C and staircasing its output. Ctrl-C still stops `bbtk-capture` via
+  `SIGTERM`/`SIGINT`, and a fullscreen SDL stimulus keeps its own Esc, which it
+  reads from the display server rather than this terminal.
+- **A stimulus exiting non-zero aborts the capture** and saves nothing. The
+  recording is uninterpretable without a stimulus that ran to completion, and an
+  aborted capture cannot be salvaged in any case (see below), so there is nothing
+  to weigh against freeing the device for the retry. Its exit status is
+  propagated, so `$?` reports what actually failed.
+- **A stimulus still running when the window closes** gets `SIGTERM`, then
+  `SIGKILL` after 5 s — but the data **is** still downloaded and saved. The window
+  ran its full length, so the recording is complete and valid; only the exit
+  status marks the mismatch. Raise `-d`, or shorten the stimulus, and re-run.
+
+`tests/Timing-Tests/run-timing-tests.sh` in the
+[goxpyriment](https://github.com/chrplr/goxpyriment) repository drives its
+photodiode steps this way, gated behind `BBTK_CAPTURE=1`.
+
+## Driving a capture from another program
+
+When the stimulus cannot be a child process — it is already running, or the
+driver is Python, or the two are on different machines — synchronise on the
+marker instead. `bbtk-capture` prints it on stdout, on its own line, at the exact
+moment the device starts recording:
 
 ```
 BBTK-CAPTURE-READY duration=120
 ```
 
-This is the synchronisation point for running a stimulus program alongside the
-capture on the same machine. Nothing earlier in the output identifies that
-instant: the `Capturing events (with DSCM) for N seconds...` message is printed
-roughly 5.7 s **before** recording begins, because the `DSCM` / `TIML` / duration
-/ `RUDS` sequence and its pacing sleeps still have to run.
+Nothing earlier in the output identifies that instant: the `Capturing events
+(with DSCM) for N seconds...` message is printed roughly 5.7 s **before**
+recording begins, because the `DSCM` / `TIML` / duration / `RUDS` sequence and its
+pacing sleeps still have to run. Wait for the marker rather than sleeping a fixed
+amount — the startup time is variable, as above.
 
-Startup takes 11–40 s in total — a fixed floor of command pacing, plus an
-internal-memory erase whose duration depends on whether the box needs a full
-format (`FRMT;`) or only an erase of used sectors (`ESEC;`). That variability is
-why a script must wait for the marker rather than sleeping a fixed amount.
-
-A wrapper can check for handshake support before touching the device: `-V`
-advertises the marker, so a binary predating it is caught immediately instead of
+A wrapper can check for marker support before touching the device: `-V`
+advertises it, so a binary predating it is caught immediately instead of
 stranding the caller for the whole ready-timeout.
 
 ```bash
@@ -137,11 +180,8 @@ wait $BBTK_PID                 # files are written when bbtk-capture exits
 Redirect stdin from `/dev/null`. `bbtk-capture` puts the terminal into raw mode
 to watch for Esc, and that terminal is shared with the stimulus program; with
 stdin closed the raw-mode call fails harmlessly and the stimulus keeps its own
-input handling.
-
-`tests/Timing-Tests/run-timing-tests.sh` in the
-[goxpyriment](https://github.com/chrplr/goxpyriment) repository implements this,
-gated behind `BBTK_CAPTURE=1`.
+input handling. (With `--` this is handled for you — the raw-mode call is skipped
+outright.)
 
 ## Interrupting a capture
 
@@ -151,10 +191,16 @@ command that stops a run early and still returns what has been recorded so far.
 Stopping is therefore worth doing only to leave the device idle and ready for the
 next capture — never to salvage data.
 
-`bbtk-capture` traps `SIGINT` (Ctrl-C) and `SIGTERM`, and Esc does the same when
-stdin is a terminal. On any of them it sends the break, drains the port so stray
-bytes do not desynchronise the next session, reports that the recording is gone,
-and exits non-zero. It does not pretend to have saved anything.
+Esc and Ctrl-C both stop a capture, as does `SIGTERM`. On any of them
+`bbtk-capture` sends the break, drains the port so stray bytes do not
+desynchronise the next session, reports that the recording is gone, and exits
+non-zero. It does not pretend to have saved anything.
+
+Note that while a capture is running and stdin is a terminal, Ctrl-C is *not* a
+signal: watching for Esc requires raw mode, which clears `ISIG`, so Ctrl-C
+arrives as a plain byte. It is read as a stop request and takes the same path as
+Esc. The `SIGINT` handler still covers the setup phase, before raw mode is
+entered, and any run whose stdin is not a terminal.
 
 The practical consequence: **work out the capture duration in advance.** A run
 that turns out too short cannot be extended, and one that is interrupted has to
