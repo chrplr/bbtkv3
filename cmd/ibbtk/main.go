@@ -198,7 +198,7 @@ func main() {
 					fmt.Printf("Capturing for %d seconds...\n", seconds)
 					// nil abort channel: the interactive shell offers no way to
 					// stop a capture other than Esc, which CaptureEvents handles.
-					data, _, err := b.CaptureEvents(seconds, false, nil)
+					data, _, err := b.CaptureEvents(seconds, bbtkv3.CaptureOptions{})
 					if err != nil {
 						fmt.Printf("capture error: %v\n", err)
 						return nil

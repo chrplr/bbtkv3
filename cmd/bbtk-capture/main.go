@@ -197,7 +197,10 @@ func main() {
 	// Data Capture
 	time.Sleep(1 * time.Second)
 	fmt.Printf("Capturing events (with DSCM) for %v seconds... ", *durationPtr)
-	data, elapsedS, err := b.CaptureEvents(*durationPtr, *noCountdownPtr, abort)
+	data, elapsedS, err := b.CaptureEvents(*durationPtr, bbtkv3.CaptureOptions{
+		NoCountdown: *noCountdownPtr,
+		Abort:       abort,
+	})
 	if errors.Is(err, bbtkv3.ErrCaptureAborted) {
 		fmt.Println("Capture stopped early and the device returned no data.")
 		fmt.Println("The recording is still in the BBTK's RAM; it will be cleared by the next capture.")

@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strconv"
 
@@ -461,14 +462,51 @@ const (
 	keyCtrlC = 3
 )
 
+// CaptureOptions tunes a single call to CaptureEvents. The zero value is the
+// interactive default: countdown on, keyboard abort on, progress on stdout.
+type CaptureOptions struct {
+	// NoCountdown suppresses the per-second countdown.
+	NoCountdown bool
+
+	// NoKeyAbort skips raw terminal mode entirely, so Esc and Ctrl-C are not
+	// watched for. Set it when another program shares this terminal: raw mode
+	// clears ISIG and ONLCR process-wide, which kills that program's Ctrl-C and
+	// staircases its line-oriented output.
+	NoKeyAbort bool
+
+	// Progress receives the human-readable progress text, including ReadyMarker.
+	// nil means os.Stdout. Point it at os.Stderr to keep stdout clear for a
+	// child process's own output.
+	Progress io.Writer
+
+	// Abort stops the capture early when closed or sent on. nil means none.
+	Abort <-chan struct{}
+}
+
+// progress returns the writer to report to, defaulting to stdout.
+func (o CaptureOptions) progress() io.Writer {
+	if o.Progress == nil {
+		return os.Stdout
+	}
+	return o.Progress
+}
+
+// maybeMakeRaw puts stdin in raw mode unless skip is set, returning the state to
+// restore. A nil state with a nil error means raw mode was not entered — either
+// because it was skipped or because stdin is not a terminal. Keeping the guard
+// in front of the call is what stops a skipped caller from silently leaving the
+// terminal raw.
+func maybeMakeRaw(skip bool) (*term.State, error) {
+	if skip {
+		return nil, nil
+	}
+	return term.MakeRaw(int(os.Stdin.Fd()))
+}
+
 // CaptureEvents records events on the device for a specified duration.
 //
-// Parameters:
-//   - duration: seconds to record. The DEVICE enforces this (it is sent as the
-//     TIML argument); the host merely waits it out.
-//   - noCountdown: suppress the per-second countdown on stdout.
-//   - abort: optional; closing or sending on this channel stops the capture
-//     early, as does pressing Esc when stdin is a terminal. Pass nil for none.
+// duration is in seconds. The DEVICE enforces it (it is sent as the TIML
+// argument); the host merely waits it out. See CaptureOptions for the rest.
 //
 // Returns the raw device text (SDAT … EDAT), the number of seconds actually
 // recorded, and an error.
@@ -483,7 +521,8 @@ const (
 //  2. Sends "RUDS" — recording starts here — and prints ReadyMarker.
 //  3. Waits out the duration, watching for Esc or the abort channel.
 //  4. Reads data from the device until the "EDAT" marker is found.
-func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan struct{}) (string, float64, error) {
+func (b *bbtkv3) CaptureEvents(duration int, opts CaptureOptions) (string, float64, error) {
+	out := opts.progress()
 	var err error
 	time.Sleep(time.Second)
 	err = b.SendCommand("DSCM")
@@ -515,7 +554,7 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 	// gated on verbose, and not on stdin being a terminal — because an external
 	// program synchronises on it. The leading newline closes the caller's
 	// progress message, which is deliberately left open.
-	fmt.Printf("\n%s duration=%d\n", ReadyMarker, duration)
+	fmt.Fprintf(out, "\n%s duration=%d\n", ReadyMarker, duration)
 
 	waitingDuration := time.Duration(duration-1) * time.Second
 
@@ -525,9 +564,13 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 	// If stdin is not a terminal (e.g. piped, or </dev/null under a wrapper
 	// script), MakeRaw fails and we skip keypress detection gracefully — the
 	// abort channel is then the only way to stop early.
-	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
+	//
+	// NoKeyAbort must be tested BEFORE calling MakeRaw, not alongside its error:
+	// the call has already changed the terminal by the time the condition is
+	// evaluated, and the matching Restore is deferred inside the branch.
+	if oldState, rawErr := maybeMakeRaw(opts.NoKeyAbort); rawErr == nil && oldState != nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("(press Esc or Ctrl-C to abort) ")
+		fmt.Fprint(out, "(press Esc or Ctrl-C to abort) ")
 		go func() {
 			buf := make([]byte, 1)
 			for {
@@ -548,13 +591,13 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 
 	aborted := false
 	for i := int(waitingDuration.Seconds()); i > 0; i-- {
-		if !noCountdown {
-			fmt.Printf("%d ", i)
+		if !opts.NoCountdown {
+			fmt.Fprintf(out, "%d ", i)
 		}
 		select {
 		case <-abortCh:
 			aborted = true
-		case <-abort:
+		case <-opts.Abort:
 			aborted = true
 		case <-time.After(time.Second):
 		}
@@ -562,8 +605,8 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 			break
 		}
 	}
-	if !noCountdown {
-		fmt.Println("0")
+	if !opts.NoCountdown {
+		fmt.Fprintln(out, "0")
 	}
 
 	elapsed := time.Since(startedAt).Seconds()
@@ -579,7 +622,7 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 		// That is also why the capture duration must be worked out in advance:
 		// a run that turns out too short cannot be extended, and one that is
 		// interrupted has to be repeated from the start.
-		fmt.Println("\nStopping capture: sending break to the BBTK...")
+		fmt.Fprintln(out, "\nStopping capture: sending break to the BBTK...")
 		if err := b.SendBreakChar(); err != nil {
 			log.Printf("CaptureEvents: SendBreakChar: %v", err)
 		}
@@ -589,11 +632,11 @@ func (b *bbtkv3) CaptureEvents(duration int, noCountdown bool, abort <-chan stru
 		return "", elapsed, ErrCaptureAborted
 	}
 
-	fmt.Println("")
-	fmt.Printf("Downloading data...")
+	fmt.Fprintln(out, "")
+	fmt.Fprintf(out, "Downloading data...")
 
 	if DEBUG {
-		fmt.Println("Waiting for data...")
+		fmt.Fprintln(out, "Waiting for data...")
 	}
 
 	// The device is about to stream, so a long idle gap here means something is
