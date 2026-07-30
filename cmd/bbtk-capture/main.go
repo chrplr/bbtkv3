@@ -320,6 +320,19 @@ func main() {
 	}
 	fmt.Fprintf(out, "Events saved to %s\n", eventsFile)
 
+	// A capture in which no sensor ever fired is a legitimate result, and a
+	// common one: a photodiode aimed off its square, a threshold set too high, or
+	// a stimulus that opened on a different display all produce it. Say so
+	// plainly — the header-only CSV above is otherwise indistinguishable from a
+	// tooling failure.
+	if len(events) == 0 {
+		fmt.Fprintln(out, "WARNING: no events detected on any port.")
+		fmt.Fprintln(out, "  The device recorded the full window but nothing crossed a threshold.")
+		fmt.Fprintln(out, "  Check that the photodiodes sit on the stimulus, that the stimulus")
+		fmt.Fprintln(out, "  opened on the display they are attached to, and the thresholds")
+		fmt.Fprintln(out, "  (bbtk-adjust-thresholds).")
+	}
+
 	// The recording is on disk, so exit last rather than earlier: a caller must
 	// still learn the stimulus failed, but not at the cost of the data. Disconnect
 	// is deferred, and os.Exit skips defers, hence the explicit call.

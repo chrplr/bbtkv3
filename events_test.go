@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -56,10 +57,70 @@ func TestLocateEdges_AllZeros(t *testing.T) {
 	}
 }
 
-func TestLocateEdges_TooShort(t *testing.T) {
-	_, _, err := LocateEdges([]int{0, 1})
-	if err == nil {
-		t.Error("expected error for sequence of length 2")
+// Short sequences are valid input, not an error. A capture that recorded nothing
+// yields a single all-zero record, so every port's sequence has length one — and
+// rejecting those made an empty capture fail instead of reporting itself empty.
+func TestLocateEdges_ShortSequences(t *testing.T) {
+	cases := []struct {
+		name            string
+		seq             []int
+		leading, faling []int // expected edge positions
+	}{
+		{name: "empty", seq: []int{}},
+		{name: "single zero", seq: []int{0}},
+		// One sample, already high: an event that opened before the capture and
+		// has no falling edge. Reported as a leading edge at 0, per the contract
+		// above.
+		{name: "single one", seq: []int{1}, leading: []int{0}},
+		{name: "two zeros", seq: []int{0, 0}},
+		{name: "rising pair", seq: []int{0, 1}, leading: []int{1}},
+		{name: "falling pair", seq: []int{1, 0}, leading: []int{0}, faling: []int{1}},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			leading, falling, err := LocateEdges(c.seq)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			gotL := make([]int, len(leading))
+			for i, e := range leading {
+				gotL[i] = e.Position
+			}
+			gotF := make([]int, len(falling))
+			for i, e := range falling {
+				gotF[i] = e.Position
+			}
+			if !reflect.DeepEqual(gotL, c.leading) && !(len(gotL) == 0 && len(c.leading) == 0) {
+				t.Errorf("leading = %v, want %v", gotL, c.leading)
+			}
+			if !reflect.DeepEqual(gotF, c.faling) && !(len(gotF) == 0 && len(c.faling) == 0) {
+				t.Errorf("falling = %v, want %v", gotF, c.faling)
+			}
+		})
+	}
+}
+
+// The exact shape the device returns from a capture in which nothing was
+// detected: one all-zero record, plus the end-of-capture sentinel bbtk-capture
+// appends. This must yield no events and no error, so the caller can still write
+// its (empty) CSV.
+func TestCaptureEventsFromDSCEvents_EmptyCapture(t *testing.T) {
+	zero := map[string]int{}
+	for _, p := range InputPortNames {
+		zero[p] = 0
+	}
+	raw := []DSCEvent{
+		{Timestamp: 0, PortStates: zero},
+		{Timestamp: 27000}, // sentinel; nil PortStates reads as 0 for every port
+	}
+
+	events, err := CaptureEventsFromDSCEvents(raw)
+	if err != nil {
+		t.Fatalf("an empty capture must not be an error, got: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("expected no events, got %d", len(events))
 	}
 }
 

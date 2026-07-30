@@ -169,9 +169,17 @@ func SaveDSCEventsToCSV(events []DSCEvent, filename string) error {
 // If the sequence starts at 1 (sensor already active), a leading edge at position 0
 // is recorded. If it ends at 1 (sensor still active), there is no corresponding
 // falling edge; the caller is responsible for handling that incomplete event.
+//
+// A sequence with no edges in it is not an error — it yields no edges. Short
+// sequences used to be rejected outright, which made a capture that recorded
+// nothing at all fail here rather than report itself as empty: the device returns
+// a single all-zero record in that case, so every port's sequence was length one
+// and "sequence too short" was the only thing the caller ever saw. The loop below
+// is correct for any length; only an empty slice needs guarding, because the
+// starts-high test would index it.
 func LocateEdges(sequence []int) ([]Edge, []Edge, error) {
-	if len(sequence) <= 2 {
-		return nil, nil, errors.New("sequence too short")
+	if len(sequence) == 0 {
+		return nil, nil, nil
 	}
 
 	var leadingEdges []Edge
