@@ -10,7 +10,7 @@
 // capturing events, and saving the captured data to files in both raw and CSV formats.
 //
 // Usage:
-//   bbtk-capture [options] <basefilename>
+//   bbtk-capture [options] <basefilename> [-- command [args...]]
 //
 //   -p string
 //         device (serial port name) (default "/dev/ttyUSB0")
@@ -25,6 +25,17 @@
 //
 // Output files are named <basefilename>-001.dat, <basefilename>-001-dscevents.csv, etc.
 // The sequence number is incremented automatically to avoid overwriting previous recordings.
+//
+// Everything after "--" is run as a child process, started at the instant the
+// device begins recording. This removes the need for a wrapper script to launch
+// bbtk-capture in the background and watch its output for the readiness marker:
+//
+//   bbtk-capture -d 516 session/av -- ./Timing-Tests -test av -cycles 1000
+//
+// In that mode bbtk-capture's own progress moves to stderr so stdout carries
+// only the child's output, the countdown and the Esc/Ctrl-C handler are turned
+// off (the terminal belongs to the child), and the child's exit status decides
+// what happens to the recording — see runChild below.
 
 // TODO: implement adjustable thresholds, reading the thresholds form the command line or from a configuration file
 // TODO: better handle errors
@@ -37,6 +48,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -78,12 +90,29 @@ func main() {
 	noCountdownPtr := flag.Bool("no-countdown", false, "Disable second-by-second countdown display")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] <basefilename>\n\nOptions:\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] <basefilename> [-- command [args...]]\n\nOptions:\n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nOutput files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefilename>-001-events.csv\nSequence number is incremented automatically to avoid overwriting previous recordings.\n")
+		fmt.Fprintf(os.Stderr, "\nAnything after -- is run as a child process, started the instant the device\nbegins recording. Progress then moves to stderr so stdout carries only the\nchild's output. A child that exits non-zero aborts the capture.\n")
 	}
 
+	// Split off the child command before parsing, so its flags are never taken
+	// for ours. See splitArgv in child.go.
+	hostArgv, childArgv := splitArgv(os.Args)
+	os.Args = hostArgv
 	flag.Parse()
+
+	// With a child to run, stdout belongs to it alone: our own progress goes to
+	// stderr, and the countdown and Esc handler are switched off because the
+	// terminal is the child's (raw mode would take away its Ctrl-C).
+	out := io.Writer(os.Stdout)
+	if len(childArgv) > 0 {
+		out = os.Stderr
+		// The library prints its own connection progress; send that to the same
+		// place, or "Trying to open /dev/... ok!" would still land on the
+		// child's stdout.
+		bbtkv3.SetProgressWriter(out)
+	}
 
 	if *versionPtr {
 		fmt.Println(bbtkv3.VersionString(Version, Build))
@@ -145,35 +174,35 @@ func main() {
 		log.Println(err)
 	} else {
 		if alive {
-			fmt.Println("bbtkv3 is alive")
+			fmt.Fprintln(out, "bbtkv3 is alive")
 		} else {
-			fmt.Println("bbtkv3 not responding to ECHO")
+			fmt.Fprintln(out, "bbtkv3 not responding to ECHO")
 		}
 	}
 	time.Sleep(time.Second)
 
 	// Parameters setting
-	fmt.Printf("Setting Smoothing mask to %+v\n", defaultSmoothingMask)
+	fmt.Fprintf(out, "Setting Smoothing mask to %+v\n", defaultSmoothingMask)
 	if err = b.SetSmoothing(defaultSmoothingMask); err != nil {
 		log.Printf("%v", err)
 	}
 	time.Sleep(time.Second)
 
-	fmt.Println("Getting thresholds...")
+	fmt.Fprintln(out, "Getting thresholds...")
 	thresholds, err := b.GetThresholds()
 	if err != nil {
 		log.Printf("GetThresholds: %v\n", err)
 	} else {
-		fmt.Printf("%+v\n", thresholds)
+		fmt.Fprintf(out, "%+v\n", thresholds)
 	}
 
 	// Clearing internal memory
 	time.Sleep(time.Second)
-	fmt.Printf("Clearing Timing data... ")
+	fmt.Fprintf(out, "Clearing Timing data... ")
 	if err := b.ClearTimingData(); err != nil {
 		log.Fatalf("ClearTimingData: %v\n", err)
 	}
-	fmt.Println("Ok")
+	fmt.Fprintln(out, "Ok")
 
 	// Stop cleanly on Ctrl-C or SIGTERM instead of dying with the recording
 	// still in the device's RAM and nothing written to disk. The capture is
@@ -196,23 +225,53 @@ func main() {
 
 	// Data Capture
 	time.Sleep(1 * time.Second)
-	fmt.Printf("Capturing events (with DSCM) for %v seconds... ", *durationPtr)
-	data, elapsedS, err := b.CaptureEvents(*durationPtr, bbtkv3.CaptureOptions{
+	fmt.Fprintf(out, "Capturing events (with DSCM) for %v seconds... ", *durationPtr)
+
+	opts := bbtkv3.CaptureOptions{
 		NoCountdown: *noCountdownPtr,
 		Abort:       abort,
-	})
+		Progress:    out,
+	}
+	var stim *child
+	if len(childArgv) > 0 {
+		stim = newChild(childArgv, out, abort)
+		// Started from inside CaptureEvents, at the instant RUDS is
+		// acknowledged, which is the whole point: the setup before it takes a
+		// variable 11-40 s that no caller can predict.
+		opts.OnRecording = stim.start
+		// The countdown would interleave with the child's output, and raw mode
+		// would take the child's Ctrl-C away and staircase its lines.
+		opts.NoCountdown = true
+		opts.NoKeyAbort = true
+	}
+
+	data, elapsedS, err := b.CaptureEvents(*durationPtr, opts)
 	if errors.Is(err, bbtkv3.ErrCaptureAborted) {
-		fmt.Println("Capture stopped early and the device returned no data.")
-		fmt.Println("The recording is still in the BBTK's RAM; it will be cleared by the next capture.")
+		fmt.Fprintln(out, "Capture stopped early and the device returned no data.")
+		fmt.Fprintln(out, "The recording is still in the BBTK's RAM; it will be cleared by the next capture.")
+		if stim != nil {
+			// Reap it either way: an abort triggered by something else (a signal,
+			// Esc) leaves the stimulus running with no window left to record it.
+			stim.finish()
+			os.Exit(stim.exitCode())
+		}
 		os.Exit(1)
 	}
 	if err != nil {
 		log.Fatalf("CaptureEvents: %v\n", err)
 	}
+
+	// The window has closed and the data is valid. A stimulus still running at
+	// this point outran the capture: it is stopped and the run reported as
+	// failed, but the files below are still written — see child.finish.
+	stimFailed := false
+	if stim != nil {
+		stimFailed = stim.finish()
+	}
 	if elapsedS < float64(*durationPtr)-1 {
-		fmt.Printf("ok! (stopped early: %.1f s of the %d s requested)\n", elapsedS, *durationPtr)
+		fmt.Fprintf(out, "ok! (stopped early: %.1f s of the %d s requested)\n", elapsedS, *durationPtr)
 	} else {
-		fmt.Println("ok!")
+		fmt.Fprintln(out, "ok!")
 	}
 
 	base := GetNextBase(baseFilename)
@@ -223,7 +282,7 @@ func main() {
 	if err := os.WriteFile(datFile, []byte(data), 0644); err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Printf("Raw Data saved to %s\n", datFile)
+	fmt.Fprintf(out, "Raw Data saved to %s\n", datFile)
 
 	dscEvents, err := bbtkv3.CaptureOutputToEvents(data)
 	if err != nil {
@@ -233,7 +292,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Printf("DSC Events saved to %s\n", dscFile)
+	fmt.Fprintf(out, "DSC Events saved to %s\n", dscFile)
 
 	// Add an event with all lines set to 0 at the end of dscEvents, so that a
 	// port still active when the capture stopped gets a falling edge and is
@@ -259,7 +318,15 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	fmt.Printf("Events saved to %s\n", eventsFile)
+	fmt.Fprintf(out, "Events saved to %s\n", eventsFile)
+
+	// The recording is on disk, so exit last rather than earlier: a caller must
+	// still learn the stimulus failed, but not at the cost of the data. Disconnect
+	// is deferred, and os.Exit skips defers, hence the explicit call.
+	if stimFailed {
+		b.Disconnect()
+		os.Exit(stim.exitCode())
+	}
 
 	// Not necessary as defer will take care of it
 	//if err = b.Disconnect(); err != nil {

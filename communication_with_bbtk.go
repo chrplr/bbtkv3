@@ -31,7 +31,27 @@ var (
 var (
 	verbose = false
 	DEBUG   = false
+
+	// progressWriter receives the human-readable progress text the verbose flag
+	// controls. It sits beside verbose, and is package-level for the same
+	// reason: the prints it feeds are scattered across functions that have no
+	// other channel back to the caller. nil means os.Stdout.
+	progressWriter io.Writer
 )
+
+// SetProgressWriter redirects the library's progress text away from stdout. Pass
+// os.Stderr when stdout must stay clear for another program's output — a
+// stimulus launched as a child of a capture, for instance. Pass nil to restore
+// the default.
+func SetProgressWriter(w io.Writer) { progressWriter = w }
+
+// ProgressWriter returns where progress text is going, resolving nil to stdout.
+func ProgressWriter() io.Writer {
+	if progressWriter == nil {
+		return os.Stdout
+	}
+	return progressWriter
+}
 
 type bbtkv3 struct {
 	port   serial.Port
@@ -83,7 +103,7 @@ func ResolvePort() string {
 		return ""
 	}
 	if len(matches) > 1 && verbose {
-		fmt.Printf("note: %d BBTK devices found, using %s\n", len(matches), matches[0])
+		fmt.Fprintf(ProgressWriter(), "note: %d BBTK devices found, using %s\n", len(matches), matches[0])
 	}
 	return matches[0]
 }
@@ -102,7 +122,7 @@ func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, er
 	}
 
 	if verbose {
-		fmt.Printf("Trying to open %v at %d bps...\n", portAddress, baudrate)
+		fmt.Fprintf(ProgressWriter(), "Trying to open %v at %d bps...\n", portAddress, baudrate)
 	}
 
 	port, err := serial.Open(portAddress, mode)
@@ -111,7 +131,7 @@ func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, er
 	}
 
 	if verbose {
-		fmt.Println("ok!")
+		fmt.Fprintln(ProgressWriter(), "ok!")
 	}
 
 	port.SetReadTimeout(time.Second)
@@ -128,7 +148,7 @@ func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, er
 func (b *bbtkv3) Connect() error {
 
 	if verbose {
-		fmt.Println("Trying to connect to BBTK...")
+		fmt.Fprintln(ProgressWriter(), "Trying to connect to BBTK...")
 	}
 
 	b.SendCommand("CONN")
@@ -144,7 +164,7 @@ func (b *bbtkv3) Connect() error {
 	}
 
 	if verbose {
-		fmt.Println("ok!")
+		fmt.Fprintln(ProgressWriter(), "ok!")
 	}
 	return nil
 }
@@ -481,12 +501,22 @@ type CaptureOptions struct {
 
 	// Abort stops the capture early when closed or sent on. nil means none.
 	Abort <-chan struct{}
+
+	// OnRecording, if set, is called once, synchronously, at the instant the
+	// device starts recording — the same instant ReadyMarker is written. It is
+	// the in-process equivalent of watching for that marker, for a caller that
+	// starts a stimulus itself rather than being driven by a wrapper script.
+	//
+	// It runs on the capture's own goroutine, immediately before the wait loop,
+	// so it must not block: whatever it delays is recorded as dead time at the
+	// head of the capture window.
+	OnRecording func()
 }
 
-// progress returns the writer to report to, defaulting to stdout.
+// progress returns the writer to report to, defaulting to the package-wide one.
 func (o CaptureOptions) progress() io.Writer {
 	if o.Progress == nil {
-		return os.Stdout
+		return ProgressWriter()
 	}
 	return o.Progress
 }
@@ -555,6 +585,10 @@ func (b *bbtkv3) CaptureEvents(duration int, opts CaptureOptions) (string, float
 	// program synchronises on it. The leading newline closes the caller's
 	// progress message, which is deliberately left open.
 	fmt.Fprintf(out, "\n%s duration=%d\n", ReadyMarker, duration)
+
+	if opts.OnRecording != nil {
+		opts.OnRecording()
+	}
 
 	waitingDuration := time.Duration(duration-1) * time.Second
 
