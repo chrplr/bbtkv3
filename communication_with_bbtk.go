@@ -542,6 +542,27 @@ func maybeMakeRaw(skip bool) (*term.State, error) {
 	return term.MakeRaw(int(os.Stdin.Fd()))
 }
 
+// LineEnding returns the terminator to end a line with on w while stdin is in
+// raw mode.
+//
+// term.MakeRaw clears OPOST, and with it the ONLCR translation that turns \n
+// into CR-LF. A bare \n then moves the cursor down a line without returning it
+// to column 0, so successive lines walk off to the right in a growing
+// staircase. Restoring the carriage return by hand is the fix.
+//
+// It is deliberately not enough to know that raw mode is on: stdin can be a
+// terminal while the output is redirected to a file, and there a CR would be
+// junk in the data. So the CR is added only when w is itself a terminal.
+func LineEnding(w io.Writer, rawMode bool) string {
+	if !rawMode {
+		return "\n"
+	}
+	if f, ok := w.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		return "\r\n"
+	}
+	return "\n"
+}
+
 // CaptureEvents records events on the device for a specified duration.
 //
 // duration is in seconds. The DEVICE enforces it (it is sent as the TIML
@@ -611,8 +632,12 @@ func (b *bbtkv3) CaptureEvents(duration int, opts CaptureOptions) (string, float
 	// NoKeyAbort must be tested BEFORE calling MakeRaw, not alongside its error:
 	// the call has already changed the terminal by the time the condition is
 	// evaluated, and the matching Restore is deferred inside the branch.
+	// Every line printed between here and the deferred Restore below needs eol
+	// rather than a bare \n; see LineEnding.
+	eol := "\n"
 	if oldState, rawErr := maybeMakeRaw(opts.NoKeyAbort); rawErr == nil && oldState != nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		eol = LineEnding(out, true)
 		fmt.Fprint(out, "(press Esc or Ctrl-C to abort) ")
 		go func() {
 			buf := make([]byte, 1)
@@ -649,7 +674,7 @@ func (b *bbtkv3) CaptureEvents(duration int, opts CaptureOptions) (string, float
 		}
 	}
 	if !opts.NoCountdown {
-		fmt.Fprintln(out, "0")
+		fmt.Fprintf(out, "0%s", eol)
 	}
 
 	elapsed := time.Since(startedAt).Seconds()
@@ -665,7 +690,7 @@ func (b *bbtkv3) CaptureEvents(duration int, opts CaptureOptions) (string, float
 		// That is also why the capture duration must be worked out in advance:
 		// a run that turns out too short cannot be extended, and one that is
 		// interrupted has to be repeated from the start.
-		fmt.Fprintln(out, "\nStopping capture: sending break to the BBTK...")
+		fmt.Fprintf(out, "%sStopping capture: sending break to the BBTK...%s", eol, eol)
 		if err := b.SendBreakChar(); err != nil {
 			log.Printf("CaptureEvents: SendBreakChar: %v", err)
 		}
@@ -675,11 +700,11 @@ func (b *bbtkv3) CaptureEvents(duration int, opts CaptureOptions) (string, float
 		return "", elapsed, ErrCaptureAborted
 	}
 
-	fmt.Fprintln(out, "")
+	fmt.Fprint(out, eol)
 	fmt.Fprintf(out, "Downloading data...")
 
 	if DEBUG {
-		fmt.Fprintln(out, "Waiting for data...")
+		fmt.Fprintf(out, "Waiting for data...%s", eol)
 	}
 
 	// The device is about to stream, so a long idle gap here means something is
@@ -779,8 +804,12 @@ func (b *bbtkv3) EventMarking(pattern [8]string) error {
 	// Wait for the user to press 'x' / 'X'.
 	stopCh := make(chan struct{}, 1)
 
+	// Lines printed while raw mode holds need eol, not a bare \n; see LineEnding.
+	eol := "\n"
+
 	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		eol = LineEnding(os.Stdout, true)
 		fmt.Print("Event marking running. Press Esc or Ctrl-C to stop.")
 		go func() {
 			buf := make([]byte, 1)
@@ -820,7 +849,7 @@ func (b *bbtkv3) EventMarking(pattern [8]string) error {
 	}
 
 	<-stopCh
-	fmt.Println("\nStopping event marking...")
+	fmt.Printf("%sStopping event marking...%s", eol, eol)
 
 	if err := b.SendBreakChar(); err != nil {
 		return fmt.Errorf("EventMarking: SendBreakChar: %w", err)

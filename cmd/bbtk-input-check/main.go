@@ -58,6 +58,21 @@ func main() {
 		log.Fatalf("ICHK: %v", err)
 	}
 
+	// Raw mode has to be entered before anything is printed, because it decides
+	// how a line must be terminated. term.MakeRaw clears OPOST, and with it the
+	// ONLCR translation that turns \n into CR-LF: a bare \n then moves the
+	// cursor down without returning it to column 0, so successive lines walk
+	// off to the right in an ever-growing staircase.
+	//
+	// eol stays "\n" when stdin is not a terminal, so redirected output keeps
+	// clean Unix line endings.
+	eol := "\n"
+	oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd()))
+	if rawErr == nil {
+		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		eol = "\r\n"
+	}
+
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -75,15 +90,13 @@ func main() {
 			if err != nil {
 				continue // read timeout or transient error — keep polling
 			}
-			fmt.Println(line)
+			fmt.Printf("%s%s", line, eol)
 		}
 	}()
 
 	// Wait for the user to press Esc.
-	// Use raw terminal mode so no Enter is required.
-	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
-		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		fmt.Print("Streaming input state. Press Esc or Ctrl-C to stop.")
+	if rawErr == nil {
+		fmt.Printf("Streaming input state. Press Esc or Ctrl-C to stop.%s", eol)
 		buf := make([]byte, 1)
 		for {
 			n, err := os.Stdin.Read(buf)
@@ -113,7 +126,7 @@ func main() {
 
 	// Send break first so the device stops streaming and the goroutine's
 	// in-flight ReadLine returns promptly.
-	fmt.Println("\nStopping...")
+	fmt.Printf("%sStopping...%s", eol, eol)
 	if err := b.SendBreakChar(); err != nil {
 		log.Printf("sendbreak: %v", err)
 	}
