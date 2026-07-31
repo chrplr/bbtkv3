@@ -258,8 +258,32 @@ func SortEventsByDuration(events []Event) {
 	})
 }
 
-// SaveEventsToCSV saves detected events to a CSV file
+// SaveEventsToCSV saves detected events to a CSV file with the three historic
+// columns: Type, Onset, Duration. Durations are exactly as recorded, smoothing
+// tail included.
+//
+// Prefer SaveEventsToCSVWithCorrection when the smoothing mask is known — its
+// extra column is what makes a file say which convention it follows.
 func SaveEventsToCSV(events []Event, filename string) error {
+	return writeEventsCSV(events, filename, nil, 0)
+}
+
+// SaveEventsToCSVWithCorrection saves detected events with a fourth column,
+// DurationCorrected, holding the duration with the smoothing tail removed on the
+// channels the mask covers (see CorrectedDuration). Channels without smoothing
+// repeat the recorded value, so the two columns agree wherever no correction
+// applies.
+//
+// Duration itself is never altered. Keeping the recorded value means captures
+// taken before this column existed stay directly comparable, and a mistaken
+// offset can be undone — neither of which survives correcting in place.
+func SaveEventsToCSVWithCorrection(events []Event, filename string, mask SmoothingMask, offsetMs float64) error {
+	return writeEventsCSV(events, filename, &mask, offsetMs)
+}
+
+// writeEventsCSV writes the events sorted by onset. A nil mask selects the
+// three-column form.
+func writeEventsCSV(events []Event, filename string, mask *SmoothingMask, offsetMs float64) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error creating file: %w", err)
@@ -273,22 +297,35 @@ func SaveEventsToCSV(events []Event, filename string) error {
 		return events[i].Onset < events[j].Onset
 	})
 
-	// Write header
-	if err := writer.Write([]string{"Type", "Onset", "Duration"}); err != nil {
+	header := []string{"Type", "Onset", "Duration"}
+	if mask != nil {
+		header = append(header, "DurationCorrected")
+	}
+	if err := writer.Write(header); err != nil {
 		return fmt.Errorf("error writing header: %w", err)
 	}
 
-	// Write events
 	for _, event := range events {
 		row := []string{
 			event.Type,
 			strconv.FormatFloat(event.Onset, 'f', 3, 64),
 			strconv.FormatFloat(event.Duration, 'f', 3, 64),
 		}
+		if mask != nil {
+			corrected := CorrectedDuration(event.Duration, event.Type, *mask, offsetMs)
+			row = append(row, strconv.FormatFloat(corrected, 'f', 3, 64))
+		}
 		if err := writer.Write(row); err != nil {
 			return fmt.Errorf("error writing row: %w", err)
 		}
 	}
 
+	// csv.Writer buffers; a flush error here is the difference between a
+	// truncated capture and a complete one, so it must not be swallowed by the
+	// deferred Flush.
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("error flushing %s: %w", filename, err)
+	}
 	return nil
 }

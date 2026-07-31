@@ -314,11 +314,18 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	err = bbtkv3.SaveEventsToCSV(events, eventsFile)
+	// The mask passed here must be the one actually programmed above, not the
+	// package default: the correction is applied per channel, so a mask that
+	// disagrees with the device would correct the wrong ones.
+	err = bbtkv3.SaveEventsToCSVWithCorrection(events, eventsFile,
+		defaultSmoothingMask, bbtkv3.DefaultSmoothingDurationOffsetMs)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	fmt.Fprintf(out, "Events saved to %s\n", eventsFile)
+	fmt.Fprintf(out, "  Duration is as recorded; DurationCorrected removes the %.1f ms\n",
+		bbtkv3.DefaultSmoothingDurationOffsetMs)
+	fmt.Fprintf(out, "  smoothing tail on %+v\n", defaultSmoothingMask)
 
 	// A capture in which no sensor ever fired is a legitimate result, and a
 	// common one: a photodiode aimed off its square, a threshold set too high, or

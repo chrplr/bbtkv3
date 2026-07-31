@@ -422,4 +422,106 @@ func TestSaveEventsToCSV(t *testing.T) {
 	if records[2][0] != "Opto1" || records[2][1] != "100.000" || records[2][2] != "5.000" {
 		t.Errorf("unexpected row 2: %v", records[2])
 	}
+	if len(records[0]) != 3 {
+		t.Errorf("three-column form expected, got header %v", records[0])
+	}
+}
+
+// --- smoothing correction ---
+
+func TestSmoothingMaskEnabled(t *testing.T) {
+	mask := SmoothingMask{Mic1: true, Opto1: true, Opto2: false}
+
+	for _, tc := range []struct {
+		port string
+		want bool
+	}{
+		{"Mic1", true},
+		{"Opto1", true},
+		{"Opto2", false},
+		{"Mic2", false},
+		// TTL and keypad lines are outside the mask entirely, so smoothing can
+		// never apply to them however the struct is filled in.
+		{"TTLin1", false},
+		{"TTLin2", false},
+		{"Keypad1", false},
+		{"nonsense", false},
+	} {
+		if got := mask.Enabled(tc.port); got != tc.want {
+			t.Errorf("Enabled(%q) = %v, want %v", tc.port, got, tc.want)
+		}
+	}
+}
+
+func TestCorrectedDuration(t *testing.T) {
+	mask := SmoothingMask{Mic1: true, Opto1: true}
+
+	for _, tc := range []struct {
+		name     string
+		duration float64
+		port     string
+		want     float64
+	}{
+		{"smoothed channel loses the tail", 220.25, "Mic1", 200.25},
+		{"unsmoothed channel untouched", 5.25, "TTLin1", 5.25},
+		{"channel off in the mask untouched", 220.25, "Opto2", 220.25},
+		// Shorter than the smoothing window: clamped rather than negative. A
+		// negative duration in a data file is worse than a zero, which at least
+		// reads as "this event carried no usable duration".
+		{"shorter than the offset clamps to zero", 12.0, "Opto1", 0},
+		{"exactly the offset clamps to zero", 20.0, "Opto1", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CorrectedDuration(tc.duration, tc.port, mask, DefaultSmoothingDurationOffsetMs)
+			if got != tc.want {
+				t.Errorf("CorrectedDuration(%v, %q) = %v, want %v", tc.duration, tc.port, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSaveEventsToCSVWithCorrection(t *testing.T) {
+	events := []Event{
+		{Type: "Mic1", Onset: 20.0, Duration: 220.25},
+		{Type: "TTLin1", Onset: 10.0, Duration: 5.25},
+		{Type: "Opto2", Onset: 30.0, Duration: 221.5},
+	}
+	mask := SmoothingMask{Mic1: true, Opto1: true} // Opto2 deliberately off
+
+	path := filepath.Join(t.TempDir(), "events.csv")
+	if err := SaveEventsToCSVWithCorrection(events, path, mask, DefaultSmoothingDurationOffsetMs); err != nil {
+		t.Fatalf("SaveEventsToCSVWithCorrection: %v", err)
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("failed to open output file: %v", err)
+	}
+	defer f.Close()
+
+	records, err := csv.NewReader(f).ReadAll()
+	if err != nil {
+		t.Fatalf("failed to read CSV: %v", err)
+	}
+
+	want := [][]string{
+		{"Type", "Onset", "Duration", "DurationCorrected"},
+		// Sorted by onset, so TTLin1 leads. Its two duration columns agree
+		// because no correction applies.
+		{"TTLin1", "10.000", "5.250", "5.250"},
+		{"Mic1", "20.000", "220.250", "200.250"},
+		// Opto2 is off in this mask, so it keeps the recorded duration even
+		// though the channel is smoothable.
+		{"Opto2", "30.000", "221.500", "221.500"},
+	}
+	if len(records) != len(want) {
+		t.Fatalf("expected %d rows, got %d: %v", len(want), len(records), records)
+	}
+	for i := range want {
+		for j := range want[i] {
+			if records[i][j] != want[i][j] {
+				t.Errorf("row %d col %d = %q, want %q", i, j, records[i][j], want[i][j])
+			}
+		}
+	}
 }
