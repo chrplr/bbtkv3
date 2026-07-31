@@ -18,6 +18,8 @@
 //         baudrate (speed in bps) (default 115200)
 //   -d int
 //         duration of capture (in s) (default 30)
+//   -s string
+//         smoothing mask, six 0/1 values (default "1,1,0,0,1,1")
 //   -D
 //         Debug mode (default false)
 //   -V
@@ -71,14 +73,14 @@ var (
 	DEBUG       = false
 )
 
-var defaultSmoothingMask = bbtkv3.SmoothingMask{
-	Mic1:  true,
-	Mic2:  true,
-	Opto4: false,
-	Opto3: false,
-	Opto2: true,
-	Opto1: true,
-}
+// DefaultSmoothingMask is what -s uses when it is not given: smoothing on both
+// microphones and Opto1/Opto2, off on Opto3/Opto4. It is the mask this tool
+// applied unconditionally before -s existed, so the default keeps old captures
+// and new ones comparable.
+//
+// The field order is the device's own — mic1, mic2, opto4, opto3, opto2, opto1,
+// with the Opto channels running downwards. See bbtkv3.SmoothingMaskFromString.
+const DefaultSmoothingMask = "1,1,0,0,1,1"
 
 func main() {
 
@@ -88,10 +90,12 @@ func main() {
 	debugPtr := flag.Bool("D", DEBUG, "Debug mode")
 	versionPtr := flag.Bool("V", false, "Display version")
 	noCountdownPtr := flag.Bool("no-countdown", false, "Disable second-by-second countdown display")
+	smoothingPtr := flag.String("s", DefaultSmoothingMask, "smoothing mask: six 0/1 values, mic1,mic2,opto4,opto3,opto2,opto1")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] <basefilename> [-- command [args...]]\n\nOptions:\n", os.Args[0])
 		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nSmoothing (-s): six 0/1 values, 1 enabling smoothing on that channel, in the\ndevice's own order — mic1,mic2,opto4,opto3,opto2,opto1, the Opto channels\nrunning DOWNWARDS. Smoothing suppresses spurious edges (without it a CRT reports\nevery refresh) at the cost of roughly %.0f ms added to each recorded duration on\nthe channels it covers; the DurationCorrected column of -events.csv takes that\nback off. TTLin and the keypad are never smoothed.\n", bbtkv3.DefaultSmoothingDurationOffsetMs)
 		fmt.Fprintf(os.Stderr, "\nOutput files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefilename>-001-events.csv\nSequence number is incremented automatically to avoid overwriting previous recordings.\n")
 		fmt.Fprintf(os.Stderr, "\nAnything after -- is run as a child process, started the instant the device\nbegins recording. Progress then moves to stderr so stdout carries only the\nchild's output. A child that exits non-zero aborts the capture.\n")
 	}
@@ -132,6 +136,13 @@ func main() {
 	baseFilename := flag.Arg(0)
 
 	DEBUG = *debugPtr
+
+	// Parsed before the port is opened: a mistyped mask should cost nothing,
+	// not surface after the handshake and the memory erase.
+	smoothingMask, err := bbtkv3.SmoothingMaskFromString(*smoothingPtr)
+	if err != nil {
+		log.Fatalf("Error parsing smoothing mask %q: %v\n(expected six 0/1 values: mic1,mic2,opto4,opto3,opto2,opto1)\n", *smoothingPtr, err)
+	}
 
 	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
 	// /dev/serial/by-id symlink (Linux only), then the built-in default.
@@ -181,9 +192,12 @@ func main() {
 	}
 	time.Sleep(time.Second)
 
-	// Parameters setting
-	fmt.Fprintf(out, "Setting Smoothing mask to %+v\n", defaultSmoothingMask)
-	if err = b.SetSmoothing(defaultSmoothingMask); err != nil {
+	// Parameters setting. The mask is echoed by channel name as well as in the
+	// -s form, so the line can be read at a glance and pasted back verbatim to
+	// reproduce the capture.
+	fmt.Fprintf(out, "Setting smoothing mask (-s %s)...\n", *smoothingPtr)
+	fmt.Fprintf(out, "%+v\n", smoothingMask)
+	if err = b.SetSmoothing(smoothingMask); err != nil {
 		log.Printf("%v", err)
 	}
 	time.Sleep(time.Second)
@@ -318,14 +332,14 @@ func main() {
 	// package default: the correction is applied per channel, so a mask that
 	// disagrees with the device would correct the wrong ones.
 	err = bbtkv3.SaveEventsToCSVWithCorrection(events, eventsFile,
-		defaultSmoothingMask, bbtkv3.DefaultSmoothingDurationOffsetMs)
+		smoothingMask, bbtkv3.DefaultSmoothingDurationOffsetMs)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	fmt.Fprintf(out, "Events saved to %s\n", eventsFile)
 	fmt.Fprintf(out, "  Duration is as recorded; DurationCorrected removes the %.1f ms\n",
 		bbtkv3.DefaultSmoothingDurationOffsetMs)
-	fmt.Fprintf(out, "  smoothing tail on %+v\n", defaultSmoothingMask)
+	fmt.Fprintf(out, "  smoothing tail on %+v\n", smoothingMask)
 
 	// A capture in which no sensor ever fired is a legitimate result, and a
 	// common one: a photodiode aimed off its square, a threshold set too high, or
