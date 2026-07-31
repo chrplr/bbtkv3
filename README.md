@@ -11,13 +11,13 @@ This page describes a set of command-line tools that streamline the testing of t
 | Tool | Description |
 |------|-------------|
 | `bbtk-detect-port` | Scans serial ports to locate the connected BBTK |
-| `bbtk-capture` | Captures events for a given duration and exports them to `.dat`, `-dscevents.csv`, and `-events.csv` files |
+| `bbtk-capture` | Captures events for a given duration (`-d`) with a given smoothing mask (`-s`) and exports them to `.dat`, `-dscevents.csv`, and `-events.csv` files |
 | `bbtk-input-check` | Streams live input state from the device (ICHK); press `Esc` to stop |
 | `bbtk-event-marking` | Configures and runs the command-event marking program on the device; press `Esc` to stop |
 | `bbtk-adjust-thresholds` | Opens the interactive sensor threshold adjustment menu on the device |
 | `bbtk-get-thresholds` | Reads and prints the current sensor thresholds |
-| `bbtk-set-thresholds` | Writes eight threshold values to the device |
-| `bbtk-set-smoothing` | Configures sensor smoothing |
+| `bbtk-set-thresholds` | Writes eight threshold (sensitivity) values to the device |
+| `bbtk-set-smoothing` | Sets the smoothing mask from a required six-value argument |
 | `bbtk-send-command` | Reads raw protocol commands from stdin, sends each to the BBTK, and prints responses to stdout |
 | `get-serial-port-list` | Lists all available serial ports on the host machine |
 | `ibbtk` | Interactive menu-driven shell — keeps a persistent connection and exposes all of the above in a nested menu |
@@ -48,6 +48,64 @@ To operate, three pieces of equipement are needed:
 
 As data are recorded asynchronously by the BBTKv3, it is possible for a single PC to switch the BBTKv3 into “capture mode”, launch the stimulation program and, when done, download the timing data from the BBTKv3 memory.
 
+
+# Typical session
+
+Three steps, in this order. The middle one is the one that decides whether your
+data mean anything.
+
+### 1. Set smoothing
+
+Smoothing tells the device to ignore short transitions. Without it, a CRT
+reports an event on every refresh; with it, each recorded duration on a smoothed
+channel is about 20 ms too long (the `DurationCorrected` column takes that back
+off).
+
+```bash
+bbtk-set-smoothing 1,1,0,0,1,1     # mics + Opto1/Opto2 smoothed, Opto3/Opto4 raw
+```
+
+Do this first, because thresholds must be tuned with smoothing already in force.
+Note that `bbtk-capture` programs its own mask at the start of every capture, so
+pass the same value there with `-s` when you get to step 3.
+
+### 2. Set thresholds, using your real stimuli
+
+**Thresholds are sensitivities, not trigger levels: the HIGHER the value, the
+more sensitive the sensor.**
+
+Tune them against the *actual stimuli of the experiment* — same display, same
+brightness, same loudness, same sensor placement, same room lighting. A
+threshold tuned on a white test square tells you nothing about a dim grey one.
+
+Raise each channel's sensitivity until it starts reporting events that are not
+there (false alarms), then back off to just below that point. That gives the
+most sensitive setting that still discriminates, which is what catches faint or
+brief stimuli without inventing them.
+
+```bash
+bbtk-adjust-thresholds        # interactive, on the device's own display
+bbtk-get-thresholds           # read back what you arrived at — record it
+bbtk-set-thresholds 63,63,32,32,80,80,80,80   # or write values directly
+```
+
+Watching a channel while you adjust it is easiest with `bbtk-input-check`, which
+streams the live state of all 12 input lines until you press Esc.
+
+### 3. Capture
+
+```bash
+bbtk-capture -d 120 -s 1,1,0,0,1,1 session1
+```
+
+This writes `session1-001.dat`, `session1-001-dscevents.csv` and
+`session1-001-events.csv`, and prints the smoothing mask and the thresholds it
+found on the device — so every capture carries a record of the settings it was
+made under. Analyse the result with `events-stats`.
+
+If nothing is detected, the capture still succeeds and warns you: that is the
+symptom of step 2 having been done against the wrong stimulus, or of a
+photodiode that has drifted off its square.
 
 # Usage
 
@@ -86,6 +144,15 @@ Options:
     	Disable second-by-second countdown display
   -p string
     	device (serial port name); overrides BBTK_PORT (default "/dev/ttyUSB0")
+  -s string
+    	smoothing mask: six 0/1 values, mic1,mic2,opto4,opto3,opto2,opto1 (default "1,1,0,0,1,1")
+
+Smoothing (-s): six 0/1 values, 1 enabling smoothing on that channel, in the
+device's own order — mic1,mic2,opto4,opto3,opto2,opto1, the Opto channels
+running DOWNWARDS. Smoothing suppresses spurious edges (without it a CRT reports
+every refresh) at the cost of roughly 20 ms added to each recorded duration on
+the channels it covers; the DurationCorrected column of -events.csv takes that
+back off. TTLin and the keypad are never smoothed.
 
 Output files: <basefilename>-001.dat, <basefilename>-001-dscevents.csv, <basefilename>-001-events.csv
 Sequence number is incremented automatically to avoid overwriting previous recordings.
@@ -94,6 +161,44 @@ Anything after -- is run as a child process, started the instant the device
 begins recording. Progress then moves to stderr so stdout carries only the
 child's output. A child that exits non-zero aborts the capture.
 ```
+
+### The `-events.csv` columns
+
+One row per detected event, sorted by onset, times in milliseconds:
+
+| Column | Meaning |
+|--------|---------|
+| `Type` | Input port the event was seen on (`Opto1`, `Mic1`, `TTLin1`, …) |
+| `Onset` | Time from the start of the capture to the leading edge |
+| `Duration` | Time the line stayed high, exactly as recorded by the device |
+| `DurationCorrected` | `Duration` with the smoothing tail removed — see below |
+
+`DurationCorrected` exists because smoothing holds a channel high past the true
+falling edge, so a recorded duration on a smoothed channel is the stimulus plus
+a fixed tail of roughly 20 ms. The correction subtracts that tail on the
+channels covered by the smoothing mask actually programmed into the device, and
+clamps at zero rather than going negative. Channels without smoothing — TTLin
+and the keypad are never covered — repeat the recorded value, so the two columns
+agree wherever no correction applies.
+
+Onsets are *not* corrected: smoothing does not delay the leading edge, only
+extends the tail, so onset latencies need no adjustment.
+
+`Duration` is never altered, which keeps captures taken before this column
+existed directly comparable and lets a mistaken offset be undone. The 20 ms
+figure is a measurement on one device, not a constant of the hardware —
+`DefaultSmoothingDurationOffsetMs` in `SmoothMask.go` records how it was
+obtained, and anyone who needs it tighter should re-measure on their own box.
+
+Two caveats:
+
+- `events-stats` reads the `Duration` column, so its statistics are of
+  **uncorrected** durations. Onset, jitter and SOA figures are unaffected.
+- The `capture run` sub-command of `ibbtk` writes the three historic columns
+  only, without `DurationCorrected`. Use `bbtk-capture` for the fourth column.
+
+Tools reading these files should look columns up by header name rather than by
+position, as `events-stats` does; that is what made adding the column safe.
 
 ## Running a stimulus inside the capture window
 
@@ -221,8 +326,8 @@ and `BBTK_PORT` unset is usually the most reliable option on Linux.
 device by opening every serial port and sending `CONN`, which disturbs whatever
 else is attached.
 
-The older description follows. If you omit `-p`, the port is read
-from the `BBTK_PORT` environment variable, so you can set it once per session:
+`BBTK_PORT` can be set once per session, and is used by every tool that takes
+`-p`:
 
 ```bash
 export BBTK_PORT=/dev/ttyUSB0          # Linux
@@ -230,15 +335,67 @@ export BBTK_PORT=/dev/cu.usbserial-BBTKXXXX  # macOS
 set BBTK_PORT=COM4                     # Windows (cmd)
 ```
 
-`-p` always takes precedence over `BBTK_PORT`. When neither is given,
-`bbtk-capture`, `bbtk-get-thresholds`, `bbtk-set-thresholds`,
-`bbtk-adjust-thresholds` and `bbtk-set-smoothing` fall back to `/dev/ttyUSB0`,
-while `ibbtk`, `bbtk-send-command`, `bbtk-input-check` and `bbtk-event-marking`
-stop with an error.
+The by-id step is Linux-only — `/dev/serial/by-id` is a udev creation, so on
+macOS and Windows the tools fall straight through to their built-in default. On
+macOS the FTDI serial number is already part of the device name
+(`/dev/cu.usbserial-…`, and note `cu.` rather than `tty.`, which blocks on open
+waiting for DCD); on Windows the driver keeps a given box on the same `COMn`.
+Set `BBTK_PORT` accordingly there.
+
+When nothing at all resolves, the tools differ: `bbtk-capture`,
+`bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds` and
+`bbtk-set-smoothing` try `/dev/ttyUSB0`, while `ibbtk`, `bbtk-send-command`,
+`bbtk-input-check` and `bbtk-event-marking` stop with an error.
 
 During the countdown, press `Esc` (no Enter needed) to abort the capture early. The program sends a stop command to the device and exits cleanly.
 
 
+
+# bbtk-set-smoothing — choose which channels are smoothed
+
+Smoothing tells the device to ignore short transitions on a channel. Without it,
+a CRT reports an event on every refresh; with it, the channel reads about 20 ms
+longer than the stimulus really lasted, because the line is held past the true
+falling edge.
+
+```bash
+bbtk-set-smoothing 1,1,0,0,1,1
+```
+
+The mask is six `0`/`1` values, `1` enabling smoothing on that channel. The
+order is the device's own, and the Opto channels **run downwards**:
+
+```
+mic1,mic2,opto4,opto3,opto2,opto1
+```
+
+So `1,1,0,0,1,1` above smooths both microphones and Opto1/Opto2, leaving Opto3
+and Opto4 unsmoothed. Commas or semicolons both work — `ToString` and the device
+use semicolons, but those need quoting in a shell, so commas are easier to type.
+The parsed mask is echoed back by channel name before it is sent:
+
+```
+Setting smoothing mask to {Mic1:true Mic2:true Opto4:false Opto3:false Opto2:true Opto1:true}
+ok!
+```
+
+TTLin and the keypad are outside the mask and are never smoothed — which is why
+they need no duration correction.
+
+Two things to know:
+
+- The setting does not survive a `bbtk-capture` run. `bbtk-capture` programs its
+  own mask at the start of every capture, overwriting whatever you set here — so
+  for a capture, pass the mask there instead:
+
+  ```bash
+  bbtk-capture -d 120 -s 1,1,1,1,1,1 session1
+  ```
+
+  `bbtk-set-smoothing` is for setting the mask on its own, outside a capture.
+- Before v1.0.21, `bbtk-set-smoothing` took no argument and silently applied a
+  fixed mask. Scripts calling it bare now print usage and exit 1; pass
+  `1,1,0,0,1,1` to keep the old behaviour.
 
 # Installation
 
@@ -367,7 +524,7 @@ Once connected, `ibbtk` presents a prompt. Type `menu` at any prompt to list ava
 | Command | Description |
 |---------|-------------|
 | `set <mask>` | Set the smoothing mask, e.g. `set 1;1;0;0;1;1` (fields: Mic1;Mic2;Opto4;Opto3;Opto2;Opto1) |
-| `default` | Enable smoothing on all sensors |
+| `all` | Enable smoothing on all sensors (was `default` before v1.0.21) |
 
 Beware: When smoothing is on for a given input line, one must subtract 20ms to durations reported by the bbtk for this input line.
 

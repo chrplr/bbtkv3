@@ -42,20 +42,20 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 - `communication_with_bbtk.go` — Serial protocol: opening the port, sending commands, reading raw event data from the device
 - `events.go` — Data structures (`DSCEvent`, `Event`), parsing raw device output, and CSV export/import
 - `thresholds.go` — `Thresholds` struct (8 × uint8, range 0–127) and parsing
-- `SmoothMask.go` — `SmoothingMask` struct (6 boolean sensor channels) and parsing
+- `SmoothMask.go` — `SmoothingMask` struct (6 boolean sensor channels), parsing, and the smoothing duration correction (`Enabled`, `CorrectedDuration`, `DefaultSmoothingDurationOffsetMs`)
 
 **CLI tools (`cmd/`)**:
 | Tool | Purpose |
 |------|---------|
-| `bbtk-capture` | Main tool — records events for a given duration, writes `.dat`, `-dscevents.csv`, `-events.csv` |
+| `bbtk-capture` | Main tool — records events for a given duration (`-d`) with a given smoothing mask (`-s`), writes `.dat`, `-dscevents.csv`, `-events.csv` |
 | `bbtk-detect-port` | Scans serial ports to locate the connected BBTK |
 | `bbtk-adjust-thresholds` | Interactive threshold adjustment menu |
 | `bbtk-get-thresholds` | Reads current thresholds from device |
 | `bbtk-set-thresholds` | Writes 8 threshold values to device |
-| `bbtk-set-smoothing` | Configures sensor smoothing |
+| `bbtk-set-smoothing` | Sets the smoothing mask from a required six-value argument (`mic1,mic2,opto4,opto3,opto2,opto1`) |
 | `get-serial-port-list` | Lists available serial ports |
 | `ibbtk` | Interactive menu-driven shell (thresholds, smoothing, capture sub-menus) |
-| `events-stats` | Offline analysis of `-events.csv`: duration/jitter/onset-difference percentiles; no device needed |
+| `events-stats` | Offline analysis of `-events.csv`: duration/jitter/onset-difference percentiles (of the uncorrected `Duration`); no device needed |
 | `bbtk-send-command` | Pipes raw commands from stdin to the device and prints responses |
 | `bbtk-event-marking` | Sends the PDCE/STYP/PATT/TIML sequence to run an event-marking program |
 | `bbtk-input-check` | Streams live input state (`ICHK`) until Esc |
@@ -69,6 +69,12 @@ BBTK Device (USB/serial)
   → events.go                   (parse + process)
   → .dat → -dscevents.csv → -events.csv
 ```
+
+**`-events.csv` columns**: `Type`, `Onset`, `Duration`, `DurationCorrected` — one row per event, sorted by onset, milliseconds. `DurationCorrected` subtracts the ~20 ms smoothing tail (`DefaultSmoothingDurationOffsetMs`) on the channels the programmed mask covers, clamping at zero; elsewhere it repeats `Duration`. `Duration` is never altered, so pre-existing captures stay comparable and a wrong offset can be undone. Onsets need no correction — smoothing extends the tail, not the leading edge.
+
+Two asymmetries to preserve when touching this:
+- `bbtk-capture` writes four columns via `SaveEventsToCSVWithCorrection()`, passing the same mask it programmed from `-s` — a mask disagreeing with the device corrects the wrong channels, so these must stay tied together. `ibbtk`'s `capture run` still writes three via `SaveEventsToCSV()`.
+- `events-stats` (`readCSV` in `cmd/events-stats/main.go`) resolves columns by header name, not position, and reads `Duration` — its duration statistics are of uncorrected values. Keep new readers header-based; that is what made the column safe to add.
 
 **Port definitions** (in `events.go`): 12 input ports (Keypad1-4, Opto1-4, TTLin1-2, Mic1-2) and 8 output ports (ActClose1-4, TTLout1-2, Sounder1-2).
 
