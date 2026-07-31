@@ -18,6 +18,7 @@ This page describes a set of command-line tools that streamline the testing of t
 | `bbtk-get-thresholds` | Reads and prints the current sensor thresholds |
 | `bbtk-set-thresholds` | Writes eight threshold (sensitivity) values to the device |
 | `bbtk-set-smoothing` | Sets the smoothing mask from a required six-value argument |
+| `bbtk-send-break` | Sends the break character to stop whatever the device is running — the recovery tool for a box left streaming |
 | `bbtk-send-command` | Reads raw protocol commands from stdin, sends each to the BBTK, and prints responses to stdout |
 | `get-serial-port-list` | Lists all available serial ports on the host machine |
 | `ibbtk` | Interactive menu-driven shell — keeps a persistent connection and exposes all of the above in a nested menu |
@@ -601,6 +602,48 @@ Options:
   -V          display version and exit
 ```
 
+# bbtk-send-break — unwedge a device left streaming
+
+```bash
+bbtk-send-break
+```
+
+Sends the break character (`X`, bare, no line ending) — the BBTKv3 mechanism for
+interrupting an operation such as `ICHK`, `OCHK` or a running event-marking
+program — then checks that the device answers again.
+
+You need this when one of the streaming tools was **killed rather than stopped
+with Esc**: `bbtk-input-check` and `bbtk-event-marking` send the break character
+themselves on a clean exit, but a `kill`, a `timeout`, or a closed terminal
+skips that, and the device carries on streaming to a port nobody is reading. The
+next tool to connect then reads that stream instead of the handshake reply:
+
+```
+Connect returned: Connect: expected "BBTK;", got "000000000000;"
+```
+
+or simply hangs. Either way, `bbtk-send-break` clears it:
+
+```
+$ bbtk-send-break
+Trying to open /dev/serial/by-id/usb-BBTK_BBTK_BBTK_V3_BBTKBBTKV3-if00-port0 at 115200 bps...
+ok!
+Break character sent.
+Trying to connect to BBTK...
+ok!
+bbtkv3 is alive
+```
+
+It does **not** handshake before sending the break, because handshaking is
+exactly what fails on a wedged device — requiring it first would make the tool
+useless in the one situation it exists for. Afterwards it purges the serial
+buffers and asks for an `ECHO`; exit status is 0 if the device answers and 1 if
+it does not, so a script can tell recovery from a box that needs power-cycling.
+Use `-n` to send the break and skip the check.
+
+`ibbtk` has the same thing as its `sendbreak` command, for when you are already
+in the shell.
+
 # bbtk-send-command — pipe raw commands to the device
 
 `bbtk-send-command` reads commands from stdin (one per line), sends each to the BBTK as a raw protocol command, and prints the device's responses to stdout. No handshake is performed automatically, so you have full control over the command sequence.
@@ -771,6 +814,18 @@ To determine which serial port the BBTK is attached toi (`/dev/ttyACM0`, `/dev/t
 
 The BBTK may appear as `/dev/cu.usbserial-BBTKXXXX`. The page at <https://ftdichip.com/drivers/vcp-drivers/> contains drivers for various MacOS X versions.
 
+
+## `expected "BBTK;", got "000000000000;"` — the device is still streaming
+
+A previous tool was killed instead of being stopped with Esc, so it never sent
+the break character and the device is still sending input-state lines. The next
+connection reads those instead of the handshake reply, and either fails with the
+message above or hangs waiting.
+
+    bbtk-send-break
+
+clears it without needing a handshake first. See the `bbtk-send-break` section
+above.
 
 ## The tools cannot reach the BBTK: suspect the USB cable
 

@@ -9,14 +9,14 @@ Command-line tools suite for the **Black Box ToolKit v3 (BBTK v3)** — a hardwa
 ## Build & Test Commands
 
 ```bash
-make build       # Build all 12 commands into _build/
+make build       # Build all 13 commands into _build/
 make test        # Run tests (verbose)
 make all         # Build, then test
 make clean       # Remove _build/ and binaries/
 go test ./...    # Run all tests directly
 ```
 
-**Cross-platform distribution** (outputs to `binaries/` as `bbtkv3-{os}-{arch}-{version}.zip`, one zip per platform holding all 12 binaries):
+**Cross-platform distribution** (outputs to `binaries/` as `bbtkv3-{os}-{arch}-{version}.zip`, one zip per platform holding all 13 binaries):
 ```bash
 make dist                 # darwin/linux/windows × amd64/arm64
 make dist VERSION=v1.2.3  # override the version (defaults to `git describe --tags --abbrev=0`)
@@ -57,6 +57,7 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 | `ibbtk` | Interactive menu-driven shell (thresholds, smoothing, capture sub-menus) |
 | `events-stats` | Offline analysis of `-events.csv`: duration/jitter/onset-difference percentiles (of the uncorrected `Duration`); no device needed |
 | `bbtk-send-command` | Pipes raw commands from stdin to the device and prints responses |
+| `bbtk-send-break` | Sends the break character to stop a running device operation; recovers a box left streaming by a killed tool. Deliberately does not handshake first — `Connect()` is what fails on a wedged device |
 | `bbtk-event-marking` | Sends the PDCE/STYP/PATT/TIML sequence to run an event-marking program |
 | `bbtk-input-check` | Streams live input state (`ICHK`) until Esc |
 
@@ -86,7 +87,7 @@ Two asymmetries to preserve when touching this:
   3. The udev symlink matching `/dev/serial/by-id/*BBTK*`, derived from the device's USB descriptors and therefore stable across replugs and power cycles, unlike `/dev/ttyUSBn`. Linux only — the glob matches nothing on macOS and Windows.
   4. A per-tool fallback, which differs between tools:
      - `/dev/ttyUSB0`: `bbtk-capture`, `bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds`, `bbtk-set-smoothing`.
-     - Exit with an error: `ibbtk`, `bbtk-send-command`, `bbtk-input-check`, `bbtk-event-marking`.
+     - Exit with an error: `ibbtk`, `bbtk-send-command`, `bbtk-input-check`, `bbtk-event-marking`, `bbtk-send-break`.
 
   On macOS and Windows, step 3 never fires, so the tools reach step 4: set `BBTK_PORT` (or pass `-p`) to `/dev/cu.usbserial-*` resp. `COMn`. `bbtk-detect-port` finds either.
 
