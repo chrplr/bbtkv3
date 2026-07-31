@@ -87,7 +87,11 @@ func ScanSerialPortForBBTK(portName string, wg *sync.WaitGroup) {
 		fmt.Println("Opened port", portName)
 	}
 	if CheckIfBBTKConnectedAt(p) {
-		fmt.Printf("BBTK found at %v\n", portName)
+		if stable := bbtkv3.StablePortName(portName); stable != portName {
+			fmt.Printf("BBTK found at %v (%v)\n", stable, portName)
+		} else {
+			fmt.Printf("BBTK found at %v\n", portName)
+		}
 	}
 }
 

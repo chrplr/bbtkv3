@@ -19,7 +19,6 @@ func fileExists(filename string) bool {
 	return true
 }
 
-
 // GetNextBase returns the next available base name of the form "{name}-NNN",
 // checking that none of the three output files (.dat, -dscevents.csv, -events.csv) already exist.
 func GetNextBase(name string) string {

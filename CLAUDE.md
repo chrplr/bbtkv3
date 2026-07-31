@@ -74,11 +74,19 @@ BBTK Device (USB/serial)
 
 ## Environment Variables
 
-- `BBTK_PORT` — Serial port path, used when `-p` is not given (`-p` takes precedence). Read via `bbtkv3.GetPortFromEnv()` in `communication_with_bbtk.go`. Two behaviours when neither is set:
-  - Fall back to `/dev/ttyUSB0`: `bbtk-capture`, `bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds`, `bbtk-set-smoothing`.
-  - Exit with an error: `ibbtk`, `bbtk-send-command`, `bbtk-input-check`, `bbtk-event-marking`.
+- `BBTK_PORT` — Serial port path, used when `-p` is not given. Every device tool resolves its port through `bbtkv3.ResolvePort()` (`communication_with_bbtk.go`), in this order:
+  1. `-p <port>` on the command line.
+  2. `BBTK_PORT` (read via `bbtkv3.GetPortFromEnv()`).
+  3. The udev symlink matching `/dev/serial/by-id/*BBTK*`, derived from the device's USB descriptors and therefore stable across replugs and power cycles, unlike `/dev/ttyUSBn`. Linux only — the glob matches nothing on macOS and Windows.
+  4. A per-tool fallback, which differs between tools:
+     - `/dev/ttyUSB0`: `bbtk-capture`, `bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds`, `bbtk-set-smoothing`.
+     - Exit with an error: `ibbtk`, `bbtk-send-command`, `bbtk-input-check`, `bbtk-event-marking`.
 
-  (`bbtk-detect-port`, `get-serial-port-list` and `events-stats` take no port and ignore the variable.)
+  On macOS and Windows, step 3 never fires, so the tools reach step 4: set `BBTK_PORT` (or pass `-p`) to `/dev/cu.usbserial-*` resp. `COMn`. `bbtk-detect-port` finds either.
+
+  `bbtkv3.StablePortName()` is the inverse of step 3: given a `/dev/ttyUSBn` name it returns the by-id symlink pointing at it. `bbtk-detect-port` uses it to report the stable name for the port it found by scanning; it returns its argument unchanged when there is no `/dev/serial/by-id`.
+
+  (`bbtk-detect-port`, `get-serial-port-list` and `events-stats` take no `-p` and ignore `BBTK_PORT`.)
 - `DEBUG` — Enable debug logging
 
 ## Dependencies

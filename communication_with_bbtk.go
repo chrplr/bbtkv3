@@ -108,6 +108,28 @@ func ResolvePort() string {
 	return matches[0]
 }
 
+// StablePortName returns the /dev/serial/by-id symlink pointing at dev, or dev
+// itself when there is none (no /dev/serial/by-id, or a name that is already a
+// symlink there). It is the inverse of what ResolvePort does: tools that find a
+// device by scanning end up with a /dev/ttyUSBn name, and should report the
+// stable one instead, for the same reason ResolvePort prefers it.
+func StablePortName(dev string) string {
+	target, err := filepath.EvalSymlinks(dev)
+	if err != nil {
+		return dev
+	}
+	links, err := filepath.Glob("/dev/serial/by-id/*")
+	if err != nil {
+		return dev
+	}
+	for _, l := range links {
+		if t, err := filepath.EvalSymlinks(l); err == nil && t == target {
+			return l
+		}
+	}
+	return dev
+}
+
 // NewBbtkv3 creates a new bbtkv3 object, connecting to the serial device at portAddress.
 func NewBbtkv3(portAddress string, baudrate int, verbose_flag bool) (*bbtkv3, error) {
 	var box bbtkv3

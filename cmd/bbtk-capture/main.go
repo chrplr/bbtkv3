@@ -134,7 +134,7 @@ func main() {
 	DEBUG = *debugPtr
 
 	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
-	// built-in default.
+	// /dev/serial/by-id symlink (Linux only), then the built-in default.
 	serPort := *portPtr
 	if serPort == "" {
 		serPort = bbtkv3.ResolvePort()

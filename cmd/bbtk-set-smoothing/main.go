@@ -73,7 +73,7 @@ func main() {
 	}
 
 	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
-	// built-in default.
+	// /dev/serial/by-id symlink (Linux only), then the built-in default.
 	serPort := *portPtr
 	if serPort == "" {
 		serPort = bbtkv3.ResolvePort()
@@ -120,9 +120,9 @@ func main() {
 	}
 	time.Sleep(time.Second)
 
-fmt.Printf("Setting Smoothing mask to %+v\n", defaultSmoothingMask)
-        if err = b.SetSmoothing(defaultSmoothingMask); err != nil {
-                log.Printf("%v", err)
-        }
+	fmt.Printf("Setting Smoothing mask to %+v\n", defaultSmoothingMask)
+	if err = b.SetSmoothing(defaultSmoothingMask); err != nil {
+		log.Printf("%v", err)
+	}
 
 }
