@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
 
 	"os"
 	"path/filepath"
@@ -193,18 +192,14 @@ func (b *bbtkv3) Connect() error {
 
 // Disconnect closes the connection to the bbtkv3.
 func (b *bbtkv3) Disconnect() error {
-	//b.SendBreak()
 	return b.port.Close()
 }
 
-// SendBreak send a serial break to the bbtk. Useful on the bbtkv2 when the box is stucked, but HARMFUL on the bbtkv3 !!! So disabled.
-func (b *bbtkv3) SendBreak() {
-	//if DEBUG {
-	//	log.Println("Sending serial break.")
-	//}
-	//b.port.Break(10. * time.Millisecond)
-	time.Sleep(time.Second)
-}
+// A serial break (port.Break) is the bbtkv2 way of unwedging a stuck box and is
+// HARMFUL on the bbtkv3, so this package never sends one. There used to be a
+// SendBreak method here whose body was commented out, leaving an exported name
+// that promised a serial break and only slept for a second; it is gone. Use
+// SendBreakChar, which is the v3 mechanism.
 
 // SendBreakChar sends the ASCII character 'X' to the BBTK without any suffix.
 // This is the BBTKv3 mechanism for interrupting ongoing device operations such
@@ -332,7 +327,7 @@ func (b *bbtkv3) SetSmoothing(mask SmoothingMask) error {
 }
 
 // FLUS command attempts to clear the USB output buffer.
-// If this fails you may need to send a Serial Break with SendBreak().
+// If this fails you may need to send the break character with SendBreakChar().
 func (b *bbtkv3) Flush() error {
 	if err := b.SendCommand("FLUS"); err != nil {
 		return err
@@ -352,14 +347,6 @@ func (b *bbtkv3) GetFirmwareVersion() (string, error) {
 		return "", fmt.Errorf("GetFirmwareVersion: %w", err)
 	}
 	return resp, nil
-}
-
-func str2uint8(s string) uint8 {
-	num, err := strconv.ParseUint(s, 10, 8)
-	if err != nil {
-		log.Fatalf("Error: %v", err)
-	}
-	return uint8(num)
 }
 
 func (b *bbtkv3) GetThresholds() (Thresholds, error) {

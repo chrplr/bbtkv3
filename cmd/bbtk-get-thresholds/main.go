@@ -2,28 +2,24 @@
 // Author: Christophe Pallier <christophe@pallier.org>
 // LICENSE: GPL-3.0
 
-// Package main provides a command-line tool to capture events using the BlackBoxToolKit (bbtkv3).
-// It allows setting various parameters such as port address, baud rate, capture duration, and output file name.
-// The tool also supports a debug mode and displays version information if requested.
+// Package main provides a command-line tool to read the activation thresholds
+// currently held by a BlackBoxToolKit (bbtkv3) and print them.
 //
-// The main functionality includes initializing the bbtkv3 device, setting parameters, clearing internal memory,
-// capturing events, and saving the captured data to files in both raw and CSV formats.
+// The eight values are sensitivities, not trigger levels: the HIGHER the value,
+// the more sensitive that sensor. See bbtk-set-thresholds to write them and
+// bbtk-adjust-thresholds to tune them interactively.
 //
 // Usage:
-//   -p string
-//         device (serial port name) (default "/dev/ttyUSB0")
-//   -b int
-//         baudrate (speed in bps) (default 115200)
-//   -d int
-//         duration of capture (in s) (default 30)
-//   -o string
-//         output file name for captured data (default "bbtk-capture.dat")
-//   -D
-//         Debug mode (default false)
-//   -V
-//         Display version
+//
+//	bbtk-get-thresholds [options]
+//
+//	-p string
+//	      device (serial port name); overrides BBTK_PORT (default "/dev/ttyUSB0")
+//	-b int
+//	      baudrate (speed in bps) (default 115200)
+//	-V
+//	      Display version
 
-// TODO: implement adjustable thresholds, reading the thresholds form the command line or from a configuration file
 // TODO: better handle errors
 // TODO: The way I handle DEBUG is a disaster, implement verbose and debug with 2 level logs.
 //        THe module bbtkv3 uses the env at
@@ -50,15 +46,6 @@ var (
 	PortAddress = "/dev/ttyUSB0"
 	Baudrate    = 115200
 )
-
-var defaultSmoothingMask = bbtkv3.SmoothingMask{
-	Mic1:  true,
-	Mic2:  true,
-	Opto4: false,
-	Opto3: false,
-	Opto2: true,
-	Opto1: true,
-}
 
 func main() {
 	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default \""+PortAddress+"\")")

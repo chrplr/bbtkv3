@@ -2,28 +2,27 @@
 // Author: Christophe Pallier <christophe@pallier.org>
 // LICENSE: GPL-3.0
 
-// Package main provides a command-line tool to capture events using the BlackBoxToolKit (bbtkv3).
-// It allows setting various parameters such as port address, baud rate, capture duration, and output file name.
-// The tool also supports a debug mode and displays version information if requested.
+// Package main puts a BlackBoxToolKit (bbtkv3) into its interactive threshold
+// adjustment mode (the AJPV command) and waits for it to finish.
 //
-// The main functionality includes initializing the bbtkv3 device, setting parameters, clearing internal memory,
-// capturing events, and saving the captured data to files in both raw and CSV formats.
+// The adjustment itself happens ON THE DEVICE: its display shows the live
+// sensor levels and its buttons change them. This tool starts that mode and
+// blocks until the device reports "Done;", so there is nothing to type here.
+//
+// Thresholds are sensitivities, not trigger levels: the HIGHER the value, the
+// more sensitive the sensor. See the "Typical session" section of the README
+// for how to choose them, and bbtk-set-thresholds to write values directly.
 //
 // Usage:
-//   -p string
-//         device (serial port name) (default "/dev/ttyUSB0")
-//   -b int
-//         baudrate (speed in bps) (default 115200)
-//   -d int
-//         duration of capture (in s) (default 30)
-//   -o string
-//         output file name for captured data (default "bbtk-capture.dat")
-//   -D
-//         Debug mode (default false)
-//   -V
-//         Display version
-
-// TODO: implement adjustable thresholds, reading the thresholds form the command line or from a configuration file
+//
+//	bbtk-adjust-thresholds [options]
+//
+//	-p string
+//	      device (serial port name); overrides BBTK_PORT (default "/dev/ttyUSB0")
+//	-b int
+//	      baudrate (speed in bps) (default 115200)
+//	-V
+//	      Display version
 
 package main
 
@@ -86,8 +85,12 @@ func main() {
 	time.Sleep(100 * time.Millisecond)
 
 	fmt.Println("Connected to the BBTKv3. Getting thresholds...")
-	if _, err := b.GetThresholds(); err != nil {
+	if t, err := b.GetThresholds(); err != nil {
 		log.Printf("GetThresholds: %v\n", err)
+	} else {
+		// Printed, not discarded: these are the values the device is about to
+		// let you edit, and the only record of where you started from.
+		fmt.Printf("%+v\n", t)
 	}
 
 	fmt.Println("The BBTKv3 is now in Threshold setting mode...")

@@ -17,16 +17,13 @@ type Thresholds struct {
 	Opto4    uint8
 }
 
-var defaultThresholds = Thresholds{
-	Mic1:     63,
-	Mic2:     63,
-	Sounder1: 63,
-	Sounder2: 63,
-	Opto1:    63,
-	Opto2:    63,
-	Opto3:    63,
-	Opto4:    63,
-}
+// Thresholds are SENSITIVITIES, not trigger levels: the higher the value, the
+// more sensitive the sensor, and the more readily it fires. Valid range 0-127.
+//
+// There is deliberately no "default" set here. A threshold is only meaningful
+// against the stimulus and the room it was tuned in, so a hardcoded table would
+// be a number with no provenance — see the "Typical session" section of the
+// README for how to arrive at values that mean something.
 
 // ToString converts a Thresholds struct to a comma-separated string
 func (t Thresholds) ToString() string {
