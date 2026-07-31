@@ -13,6 +13,11 @@ ARCHS     ?= amd64 arm64
 GIT_HASH   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GO_SOURCES := $(shell find . -name '*.go' -not -path './$(BUILD_DIR)/*' -not -path './$(DIST_DIR)/*') go.mod go.sum
 
+# The version and hash reach the binaries through -ldflags, so a new tag or
+# commit must force a rebuild even when no .go file changed. Depending on a
+# stamp file named after both makes that visible to make.
+STAMP := $(BUILD_DIR)/.stamp-$(VERSION)-$(GIT_HASH)
+
 LDFLAGS := -ldflags "\
   -X github.com/chrplr/bbtkv3.Version=$(VERSION) \
   -X github.com/chrplr/bbtkv3.Build=$(GIT_HASH) \
@@ -25,7 +30,12 @@ all: build test
 
 build: $(addprefix $(BUILD_DIR)/, $(CMDS))
 
-$(BUILD_DIR)/%: $(GO_SOURCES)
+$(STAMP):
+	@mkdir -p $(BUILD_DIR)
+	@rm -f $(BUILD_DIR)/.stamp-*
+	@touch $@
+
+$(BUILD_DIR)/%: $(GO_SOURCES) $(STAMP)
 	@mkdir -p $(BUILD_DIR)
 	go build $(LDFLAGS) -o $@ ./cmd/$*
 
