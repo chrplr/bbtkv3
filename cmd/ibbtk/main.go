@@ -145,13 +145,10 @@ func main() {
 				},
 			},
 			{
-				Command:     "default",
+				Command:     "all",
 				Description: "Enable smoothing on all sensors",
 				Function: func(args ...string) error {
-					mask := bbtkv3.SmoothingMask{
-						Mic1: true, Mic2: true,
-						Opto1: true, Opto2: true, Opto3: true, Opto4: true,
-					}
+					mask := bbtkv3.SmoothingAllOn
 					if err := b.SetSmoothing(mask); err != nil {
 						fmt.Printf("error setting smoothing: %v\n", err)
 						return nil

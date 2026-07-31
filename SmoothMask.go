@@ -15,7 +15,12 @@ type SmoothingMask struct {
 	Opto1 bool
 }
 
-var defaultSmoothingMask = SmoothingMask{
+// SmoothingAllOn enables smoothing on every channel the mask covers. Not a
+// default in any sense — nothing applies it unless asked. With smoothing off, a
+// channel reports every leading edge, including each refresh of a CRT; with it
+// on, the reported duration carries the tail described at
+// DefaultSmoothingDurationOffsetMs.
+var SmoothingAllOn = SmoothingMask{
 	Mic1:  true,
 	Mic2:  true,
 	Opto4: true,
@@ -112,10 +117,16 @@ func (s SmoothingMask) ToString() string {
 	return fmt.Sprintf("%d;%d;%d;%d;%d;%d", mic1, mic2, opto4, opto3, opto2, opto1)
 }
 
-// FromString parses a semicolon-separated string into a SmoothingMask struct
+// SmoothingMaskFromString parses six 0/1 values into a SmoothingMask, in the
+// order the device expects them: Mic1, Mic2, Opto4, Opto3, Opto2, Opto1 — note
+// the Opto channels run downwards.
+//
+// Commas and semicolons are both accepted. ToString emits semicolons, matching
+// the wire format, but a semicolon has to be quoted to survive a shell, so
+// anything typed at a prompt may use commas instead.
 func SmoothingMaskFromString(s string) (SmoothingMask, error) {
 	var mask SmoothingMask
-	parts := strings.Split(s, ";")
+	parts := strings.Split(strings.ReplaceAll(s, ",", ";"), ";")
 
 	if len(parts) != 6 {
 		return mask, fmt.Errorf("invalid format: expected 6 values, got %d", len(parts))
