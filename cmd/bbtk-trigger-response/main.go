@@ -57,7 +57,7 @@ func main() {
 	outPtr := flag.String("o", "TTLout1", "comma-separated output port(s) to pulse: "+strings.Join(bbtkv3.OutputPortNames, ", "))
 	rtPtr := flag.Int("rt", 200, "delay from trigger to pulse onset, in ms")
 	durPtr := flag.Int("d", 500, "pulse duration, in ms")
-	modelPtr := flag.String("model", "elite", "BBTK model, which sets the mask widths: elite (20/16 lines) or standard (12/8)")
+	modelPtr := flag.String("model", "standard", "mask widths: standard (12/8 lines) or elite (20/16). standard is confirmed working on a BBTKv3 Elite; see the README before changing it")
 	anyPtr := flag.Bool("any", false, "respond to the trigger line(s) whatever the other input lines are doing (STYP INDI); the default requires an exact match of the whole input port (STYP PATT)")
 	dryPtr := flag.Bool("n", false, "dry run: print the command sequence and exit without opening the port")
 	versionPtr := flag.Bool("V", false, "display version and exit")

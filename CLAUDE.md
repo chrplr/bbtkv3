@@ -42,7 +42,7 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 - `communication_with_bbtk.go` — Serial protocol: opening the port, sending commands, reading raw event data from the device
 - `events.go` — Data structures (`DSCEvent`, `Event`), parsing raw device output, and CSV export/import
 - `thresholds.go` — `Thresholds` struct (8 × uint8, range 0–127) and parsing
-- `dsre.go` — Digital Stimulus Response Echo: model widths (`StandardWidths` 12/8, `EliteWidths` 20/16), port-name→bitmask helpers (`InputMask`, `OutputMask`), row and sequence builders (`DSRERow`, `DSRESequence`), and `DSREProgram`. Two facts from §8.1 of the API Guide that are easy to get wrong and cost a hardware session each: DSRE takes **exactly one** stimulus-response row (unlike event marking's eight — do not pad), and the mask widths follow the **model**, not the protocol, so an Elite needs 20/16-bit masks. `STYP PATT` demands an exact match of the whole input port; `STYP INDI` (`-any`) matches individual lines
+- `dsre.go` — Digital Stimulus Response Echo: mask widths (`StandardWidths` 12/8, `EliteWidths` 20/16), port-name→bitmask helpers (`InputMask`, `OutputMask`), row and sequence builders (`DSRERow`, `DSRESequence`), and `DSREProgram`. Verified against a BBTKv3 Elite, firmware `20230405`. Three things that each cost a hardware session: DSRE takes **exactly one** stimulus-response row (unlike event marking's eight — do not pad); the masks are **12/8 even on an Elite**, despite that box having 20/16 lines and its event-marking rows being 20/16 wide; and reading replies must go through the port directly, not `ReadLine` — `bufio` retries a silent port 100 times (~100 s per unanswered command). `STYP PATT` demands an exact match of the whole input port, `STYP INDI` (`-any`) matches individual lines. The v3 answers **nothing** during DSRE programming, so silence is not a symptom
 - `SmoothMask.go` — `SmoothingMask` struct (6 boolean sensor channels), parsing, and the smoothing duration correction (`Enabled`, `CorrectedDuration`, `DefaultSmoothingDurationOffsetMs`)
 
 **CLI tools (`cmd/`)**:
@@ -61,7 +61,7 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 | `bbtk-send-break` | Sends the break character to stop a running device operation; recovers a box left streaming by a killed tool. Deliberately does not handshake first — `Connect()` is what fails on a wedged device |
 | `bbtk-event-marking` | Sends the PDCE/STYP/PATT/TIML sequence to run an event-marking program |
 | `bbtk-input-check` | Streams live input state (`ICHK`) until Esc |
-| `bbtk-trigger-response` | Runs a DSRE program: trigger input → delay → output pulse, looping until Esc. Defaults drive the Robotic Key Actuator on TTLout1 from TTLin2, `-model elite` |
+| `bbtk-trigger-response` | Runs a DSRE program: trigger input → delay → output pulse, looping until Esc. Defaults drive the Robotic Key Actuator on TTLout1 from TTLin2 |
 
 The canonical list is `CMDS` in the Makefile — keep it in sync when adding a command under `cmd/`.
 

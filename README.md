@@ -620,7 +620,6 @@ reason to use it rather than a loop in your own program.
 bbtk-trigger-response                       # TTLin2 → 200 ms → TTLout1 for 500 ms
 bbtk-trigger-response -n                    # print the command sequence, touch nothing
 bbtk-trigger-response -any                  # ignore activity on other input lines
-bbtk-trigger-response -model standard       # Entry/Pro box: 12/8 lines instead of 20/16
 bbtk-trigger-response -i Opto1 -rt 285 -d 105
 ```
 
@@ -632,7 +631,7 @@ Options:
   -o string   comma-separated output port(s) to pulse (default "TTLout1")
   -rt int     delay from trigger to pulse onset, in ms (default 200)
   -d int      pulse duration, in ms (default 500)
-  -model str  BBTK model, which sets the mask widths: elite (20/16) or standard (12/8) (default "elite")
+  -model str  mask widths: standard (12/8) or elite (20/16) (default "standard")
   -any        respond whatever the other input lines are doing (STYP INDI)
   -n          dry run: print the command sequence and exit without opening the port
   -V          display version and exit
@@ -645,26 +644,33 @@ TTLout1,TTLout2` pulses both at once.
 
 As with `bbtk-event-marking`, a one-second pause precedes each protocol command
 so the device can digest each step; expect about ten seconds between launching
-the tool and the program actually running. Every reply the device sends is
-echoed, prefixed with the command that provoked it — `PCCR` in particular answers
-with the sequence it understood, which is how you tell a program the box accepted
-from one it discarded.
+the tool and the program actually running. Any reply the device sends is echoed,
+prefixed with the command that provoked it. The v2 API Guide says `PCCR` answers
+with the sequence it understood — but **firmware `20230405` says nothing at all**
+through the whole DSRE sequence, so on a v3 expect no output here even on a run
+that works. Silence is not a symptom.
 
-## Model: mask widths are not the same on every box
+Press `Esc` to stop. That sends the break character `X`, which **does** cleanly
+stop a running DSRE program and leaves the box responsive — verified. (The v2 API
+Guide claims DSRE can only be stopped by a serial break that resets the ARM chip.
+On the v3 that is wrong, and a serial break does nothing useful.)
 
-**The mask widths follow the model.** An Entry or Pro box has 12 input and 8
-output lines; an **Elite** has 20 and 16, the extra ones being the TTLe expansion
-board. The masks must be as wide as the model or the device rejects the row, so
-`-model` decides how wide `-i` and `-o` are rendered:
+## Model: use the standard 12/8 widths, even on an Elite
 
-| `-model` | Inputs | Outputs | Row for `-i TTLin2 -o TTLout1` |
+**DSRE wants 12-bit input masks and 8-bit output masks on every model, the Elite
+included.** That is not the obvious guess: an Elite has 20 input and 16 output
+lines, and the event-marking rows elsewhere in this repo really are 20 and 16
+bits wide. DSRE does not follow suit.
+
+Verified on a BBTKv3 **Elite**, firmware `20230405`: `-model standard` programs
+it and the response fires. `-model elite` is kept for the TTLe expansion lines
+and is **unverified** — and since this tool can only name the standard lines, it
+currently buys nothing.
+
+| `-model` | Inputs | Outputs | Row for `-i Opto1 -o TTLout1` |
 |---|---|---|---|
-| `elite` (default) | 20 | 16 | `00000000100000000000,9…9,9…9,200,0000010000000000,500` |
-| `standard`, `pro`, `entry` | 12 | 8 | `000000001000,999999999999,999999999999,200,00000100,500` |
-
-The standard lines keep their bit positions in both, so an Elite mask is the
-standard mask with trailing zeros for the expansion lines. `bbtk-trigger-response`
-cannot name the expansion lines, so they are always 0.
+| `standard` (default), `pro`, `entry` | 12 | 8 | `000000010000,999999999999,999999999999,200,00000100,500` |
+| `elite` (unverified) | 20 | 16 | `00000001000000000000,9…9,9…9,200,0000010000000000,500` |
 
 ## Matching: `PATT` versus `INDI`
 
@@ -716,19 +722,24 @@ Three things to keep in mind:
 
 Work down this list; it isolates the fault in about two minutes.
 
-1. **Is TTL Out 1 firing at all?** Take DSRE out of the picture with the Output
-   Line Check: `ibbtk` → `outputcheck`, then send `00000100`. That latches TTL
-   Out 1 on, and the RKA should press and stay pressed (send `00000000` to
-   release). The RKA guide describes exactly this test under its F3 utility. If
-   nothing moves here, the problem is the wiring, the 24 V PSU or the actuator —
-   not this tool.
-2. **Did the device accept the program?** Watch the echoed `PCCR` reply. It
-   reports the sequence the box understood; a program it rejected shows up here.
-3. **Is `-model` right?** An Elite fed 12/8-bit masks, or a Pro fed 20/16-bit
-   ones, gets a row it cannot parse.
-4. **Is another input line active?** Try `-any`. See the section above.
-5. **Is the trigger reaching the box?** `bbtk-input-check` streams the live input
-   state; you should see the bit for your trigger line change.
+1. **Is `-model standard`?** The 20/16 Elite widths do not work for DSRE, on an
+   Elite or anywhere else. This is the mistake that cost a whole session.
+2. **Is the trigger reaching the box?** `bbtk-input-check` streams the live input
+   state; you should see the bit for your trigger line change. Press `Esc` to stop.
+3. **Is another input line active?** Try `-any`. See the section above.
+4. **Is TTL Out 1 firing at all?** Take DSRE out of the picture with the Output
+   Line Check — `ibbtk` → `outputcheck`, then `00000100` to latch TTL Out 1 (the
+   RKA presses and holds) and `00000000` to release. The RKA guide describes this
+   test under its F3 utility.
+
+   > ⚠️ **`OCHK` wedges a BBTKv3, and only a power cycle gets it back.** Neither
+   > `X` nor a real serial break recovers it — all three were tried. The v2 API
+   > Guide's advice to send a serial break does not work on the v3. Use this test
+   > only when you genuinely suspect the wiring or the actuator, and expect to
+   > switch the box off and on afterwards.
+
+5. **Does the device reply?** It does not — see above. Do not read silence as
+   failure.
 
 To verify the sequence itself without moving anything, run `-n` and check it
 against section 8.1 of the API Guide, then run the real thing with the RKA's own

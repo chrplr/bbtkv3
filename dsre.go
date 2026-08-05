@@ -28,11 +28,14 @@ package bbtkv3
 //     rather than multiple".  Do not pad the payload out to eight rows the way
 //     event marking does; the extra rows are not ignored.
 //
-//   - Mask widths follow the MODEL, not the protocol.  An Entry or Pro box has
-//     12 input and 8 output lines; an Elite has 20 and 16, the extra ones being
-//     the TTLe expansion board.  The masks must be as wide as the model, which
-//     is why EliteWidths exists and why the event-marking rows elsewhere in
-//     this repo are 20 and 16 bits wide.
+//   - Mask widths are 12 and 8 — ON AN ELITE TOO.  This was tested against a
+//     BBTKv3 Elite (firmware 20230405) on 2026-08-05: StandardWidths programs
+//     it correctly and the response fires.  That is worth stating because the
+//     Elite has 20 input and 16 output lines, and the event-marking rows
+//     elsewhere in this repo really are 20 and 16 bits wide, so the natural
+//     guess is that DSRE follows suit.  It does not.  EliteWidths is kept for
+//     the TTLe expansion lines but is UNVERIFIED, and since this package can
+//     name only the standard lines it currently buys nothing.
 //
 // This is the mode that drives the Robotic Key Actuator: the RKA solenoid is
 // wired to TTL Out 1 through the 3.5 mm lead on the TTL/ASC extension port, so
@@ -55,12 +58,12 @@ type PortWidths struct {
 	Outputs int
 }
 
-// The two models' line counts. StandardWidths covers the Entry and Pro boxes,
-// which is what the API Guide's examples show. EliteWidths adds the TTLe
-// expansion board's lines: the standard lines keep their bit positions and the
-// expansion lines occupy the new high-numbered ones, so an Elite mask is a
-// standard mask with trailing zeros — which is exactly the shape of the
-// event-marking rows in this repo (20 bits and 16 bits, "all last 8 set to 0").
+// The two width settings. StandardWidths is what the API Guide's examples show
+// and what DSRE wants on every model tested so far, the Elite included — it is
+// the default and the one to use. EliteWidths matches the Elite's full line
+// count (the extra lines being the TTLe expansion board) and is what event
+// marking uses on that model; it is retained for DSRE only because the
+// expansion lines may need it, and is UNVERIFIED there.
 var (
 	StandardWidths = PortWidths{Inputs: 12, Outputs: 8}
 	EliteWidths    = PortWidths{Inputs: 20, Outputs: 16}
@@ -242,7 +245,6 @@ func (b *bbtkv3) DSREProgram(row string, match DSREMatch, timeLimitUs int) error
 		b.reportReplies(cmd)
 	}
 
-	time.Sleep(time.Second)
 	time.Sleep(500 * time.Millisecond)
 	if err := b.SendCommand(run); err != nil {
 		return fmt.Errorf("DSREProgram: %s: %w", run, err)
@@ -259,15 +261,38 @@ func (b *bbtkv3) DSREProgram(row string, match DSREMatch, timeLimitUs int) error
 	return nil
 }
 
-// reportReplies prints whatever the device has to say about cmd. It stops at
-// the first read timeout, so a command that answers nothing costs one timeout
-// (a second) and prints nothing.
+// reportReplies prints whatever the device has to say about cmd, and doubles as
+// the pacing pause: it returns once the port has been quiet for a second.
+//
+// It reads the port directly rather than through ReadLine. A bufio read on a
+// silent port does NOT return promptly: the 1 s port read timeout surfaces as a
+// zero-length read, and bufio retries 100 of those before reporting
+// io.ErrNoProgress — so a command the device does not answer would block for
+// a minute and a half, and a program of eight such commands never reaches RUSR
+// at all. CaptureEvents and drainPort read the port the same way for the same
+// reason.
 func (b *bbtkv3) reportReplies(cmd string) {
-	for {
-		line, err := b.ReadLine()
+	var text strings.Builder
+	buff := make([]byte, 1024)
+	var idle time.Duration
+
+	for idle < time.Second {
+		n, err := b.port.Read(buff)
 		if err != nil {
-			return
+			break
 		}
+		if n == 0 {
+			idle += time.Second // one port read timeout elapsed
+			continue
+		}
+		idle = 0
+		text.Write(buff[:n])
+	}
+
+	// The device separates its answers with ';' and CRLF; show one per line.
+	for _, line := range strings.FieldsFunc(text.String(), func(r rune) bool {
+		return r == '\n' || r == '\r'
+	}) {
 		if line = strings.TrimSpace(line); line != "" {
 			fmt.Fprintf(ProgressWriter(), "  %s → %s\n", cmd, line)
 		}
