@@ -3,6 +3,9 @@ binaries/
 *.dat
 *.csv
 
+# Official bbtk docs
+/docs/
+
 # Build output
 /_build/
 

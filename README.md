@@ -619,6 +619,8 @@ reason to use it rather than a loop in your own program.
 ```bash
 bbtk-trigger-response                       # TTLin2 → 200 ms → TTLout1 for 500 ms
 bbtk-trigger-response -n                    # print the command sequence, touch nothing
+bbtk-trigger-response -any                  # ignore activity on other input lines
+bbtk-trigger-response -model standard       # Entry/Pro box: 12/8 lines instead of 20/16
 bbtk-trigger-response -i Opto1 -rt 285 -d 105
 ```
 
@@ -630,6 +632,8 @@ Options:
   -o string   comma-separated output port(s) to pulse (default "TTLout1")
   -rt int     delay from trigger to pulse onset, in ms (default 200)
   -d int      pulse duration, in ms (default 500)
+  -model str  BBTK model, which sets the mask widths: elite (20/16) or standard (12/8) (default "elite")
+  -any        respond whatever the other input lines are doing (STYP INDI)
   -n          dry run: print the command sequence and exit without opening the port
   -V          display version and exit
 ```
@@ -641,7 +645,37 @@ TTLout1,TTLout2` pulses both at once.
 
 As with `bbtk-event-marking`, a one-second pause precedes each protocol command
 so the device can digest each step; expect about ten seconds between launching
-the tool and the program actually running.
+the tool and the program actually running. Every reply the device sends is
+echoed, prefixed with the command that provoked it — `PCCR` in particular answers
+with the sequence it understood, which is how you tell a program the box accepted
+from one it discarded.
+
+## Model: mask widths are not the same on every box
+
+**The mask widths follow the model.** An Entry or Pro box has 12 input and 8
+output lines; an **Elite** has 20 and 16, the extra ones being the TTLe expansion
+board. The masks must be as wide as the model or the device rejects the row, so
+`-model` decides how wide `-i` and `-o` are rendered:
+
+| `-model` | Inputs | Outputs | Row for `-i TTLin2 -o TTLout1` |
+|---|---|---|---|
+| `elite` (default) | 20 | 16 | `00000000100000000000,9…9,9…9,200,0000010000000000,500` |
+| `standard`, `pro`, `entry` | 12 | 8 | `000000001000,999999999999,999999999999,200,00000100,500` |
+
+The standard lines keep their bit positions in both, so an Elite mask is the
+standard mask with trailing zeros for the expansion lines. `bbtk-trigger-response`
+cannot name the expansion lines, so they are always 0.
+
+## Matching: `PATT` versus `INDI`
+
+By default the firmware is programmed with `STYP PATT`, which fires only on an
+**exact match of the whole input port** — every line in your mask high *and every
+other line low*. If anything else on the port is active, no response is generated.
+That is a silent failure and an easy one to hit on a busy rig.
+
+`-any` sends `STYP INDI` instead, which fires when any line in the mask is active
+whatever the rest of the port is doing. Reach for it when nothing happens and you
+are not certain the other lines are quiet.
 
 ## Driving the Robotic Key Actuator
 
@@ -678,8 +712,26 @@ Three things to keep in mind:
   duration.** Outside them the tool warns but still runs, since DSRE itself is
   general.
 
-To verify the whole chain without moving anything, run `-n` first and check the
-sequence against the BBTK API Guide, then run the real thing with the RKA's own
+### If the actuator does not move
+
+Work down this list; it isolates the fault in about two minutes.
+
+1. **Is TTL Out 1 firing at all?** Take DSRE out of the picture with the Output
+   Line Check: `ibbtk` → `outputcheck`, then send `00000100`. That latches TTL
+   Out 1 on, and the RKA should press and stay pressed (send `00000000` to
+   release). The RKA guide describes exactly this test under its F3 utility. If
+   nothing moves here, the problem is the wiring, the 24 V PSU or the actuator —
+   not this tool.
+2. **Did the device accept the program?** Watch the echoed `PCCR` reply. It
+   reports the sequence the box understood; a program it rejected shows up here.
+3. **Is `-model` right?** An Elite fed 12/8-bit masks, or a Pro fed 20/16-bit
+   ones, gets a row it cannot parse.
+4. **Is another input line active?** Try `-any`. See the section above.
+5. **Is the trigger reaching the box?** `bbtk-input-check` streams the live input
+   state; you should see the bit for your trigger line change.
+
+To verify the sequence itself without moving anything, run `-n` and check it
+against section 8.1 of the API Guide, then run the real thing with the RKA's own
 24 V supply switched off and watch the TTL Out 1 LED on the front panel.
 
 # bbtk-send-break — unwedge a device left streaming

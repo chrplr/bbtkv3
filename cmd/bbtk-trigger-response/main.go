@@ -16,12 +16,13 @@
 //
 //	bbtk-trigger-response                      # TTLin2 -> 200 ms -> TTLout1 for 500 ms
 //	bbtk-trigger-response -n                   # print the command sequence, touch nothing
-//	bbtk-trigger-response -i Opto1 -rt 285 -d 105
+//	bbtk-trigger-response -any                 # ignore activity on other input lines
+//	bbtk-trigger-response -model standard      # Entry/Pro box: 12/8 lines instead of 20/16
 //
 // Usage:
 //
 //	bbtk-trigger-response [-p <port>] [-b <baudrate>] [-i <inputs>] [-o <outputs>]
-//	                      [-rt <ms>] [-d <ms>] [-n]
+//	                      [-rt <ms>] [-d <ms>] [-model <name>] [-any] [-n]
 package main
 
 import (
@@ -56,6 +57,8 @@ func main() {
 	outPtr := flag.String("o", "TTLout1", "comma-separated output port(s) to pulse: "+strings.Join(bbtkv3.OutputPortNames, ", "))
 	rtPtr := flag.Int("rt", 200, "delay from trigger to pulse onset, in ms")
 	durPtr := flag.Int("d", 500, "pulse duration, in ms")
+	modelPtr := flag.String("model", "elite", "BBTK model, which sets the mask widths: elite (20/16 lines) or standard (12/8)")
+	anyPtr := flag.Bool("any", false, "respond to the trigger line(s) whatever the other input lines are doing (STYP INDI); the default requires an exact match of the whole input port (STYP PATT)")
 	dryPtr := flag.Bool("n", false, "dry run: print the command sequence and exit without opening the port")
 	versionPtr := flag.Bool("V", false, "display version and exit")
 	flag.Parse()
@@ -65,7 +68,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	trigger, err := bbtkv3.InputMask(strings.Split(*inPtr, ",")...)
+	widths, err := bbtkv3.WidthsForModel(*modelPtr)
+	if err != nil {
+		log.Fatalf("-model: %v", err)
+	}
+
+	trigger, err := bbtkv3.InputMask(widths.Inputs, strings.Split(*inPtr, ",")...)
 	if err != nil {
 		log.Fatalf("-i: %v", err)
 	}
@@ -73,7 +81,7 @@ func main() {
 		log.Fatal("-i: at least one trigger input port is required")
 	}
 
-	outputs, err := bbtkv3.OutputMask(strings.Split(*outPtr, ",")...)
+	outputs, err := bbtkv3.OutputMask(widths.Outputs, strings.Split(*outPtr, ",")...)
 	if err != nil {
 		log.Fatalf("-o: %v", err)
 	}
@@ -81,20 +89,27 @@ func main() {
 		log.Fatal("-o: at least one output port is required")
 	}
 
-	row, err := bbtkv3.DSRERow([]string{trigger}, *rtPtr, outputs, *durPtr)
+	match := bbtkv3.MatchPattern
+	if *anyPtr {
+		match = bbtkv3.MatchIndividual
+	}
+
+	row, err := bbtkv3.DSRERow([]string{trigger}, *rtPtr, outputs, *durPtr, widths)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// 0 means "run until interrupted", which is what makes this a loop.
-	seq, err := bbtkv3.DSRESequence([]string{row}, 0)
+	// 0 means "run until stopped", which is what makes this a loop.
+	seq, err := bbtkv3.DSRESequence(row, match, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	fmt.Printf("Model:   %s (%d input lines, %d output lines)\n", strings.ToLower(*modelPtr), widths.Inputs, widths.Outputs)
 	fmt.Printf("Trigger: %s (%s)\n", *inPtr, trigger)
 	fmt.Printf("Output:  %s (%s)\n", *outPtr, outputs)
 	fmt.Printf("Pulse:   %d ms after the trigger, for %d ms, repeating\n", *rtPtr, *durPtr)
+	fmt.Printf("Match:   %s\n", matchDescription(match))
 
 	// TTL In 1 carries the Breakout Board's calibration button and TTL Out 1
 	// carries the solenoid, so the RKA guide says to leave both unwired while
@@ -145,7 +160,15 @@ func main() {
 		log.Fatalf("connect: %v", err)
 	}
 
-	if err := b.DSREProgram([]string{row}, 0); err != nil {
+	fmt.Println("\nProgramming the device; its replies follow.")
+	if err := b.DSREProgram(row, match, 0); err != nil {
 		log.Fatalf("trigger-response: %v", err)
 	}
+}
+
+func matchDescription(m bbtkv3.DSREMatch) string {
+	if m == bbtkv3.MatchIndividual {
+		return "INDI — any activity on the trigger line(s), whatever else is going on"
+	}
+	return "PATT — exact match of the whole input port (use -any if other lines may be active)"
 }

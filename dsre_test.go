@@ -11,28 +11,38 @@ func TestInputMask(t *testing.T) {
 	// Keypad4..Keypad1, Opto4..Opto1, TTLin2, TTLin1, Mic2, Mic1, so TTLin1 is
 	// the tenth of twelve.
 	for _, tc := range []struct {
+		width int
 		names []string
 		want  string
 	}{
-		{[]string{"TTLin1"}, "000000000100"},
-		{[]string{"ttlin1"}, "000000000100"}, // case-insensitive
-		{[]string{"Opto1"}, "000000010000"},
-		{[]string{"Mic1"}, "000000000001"},
-		{[]string{"Keypad4"}, "100000000000"},
-		{[]string{"Opto1", "Mic1"}, "000000010001"},
-		{nil, "000000000000"},
+		{12, []string{"TTLin1"}, "000000000100"},
+		{12, []string{"TTLin2"}, "000000001000"},
+		{12, []string{"ttlin1"}, "000000000100"}, // case-insensitive
+		{12, []string{"Opto1"}, "000000010000"},
+		{12, []string{"Mic1"}, "000000000001"},
+		{12, []string{"Keypad4"}, "100000000000"},
+		{12, []string{"Opto1", "Mic1"}, "000000010001"},
+		{12, nil, "000000000000"},
+		// On an Elite the standard lines keep their bit positions and the
+		// TTLe expansion lines occupy the new ones, so the mask is the
+		// standard mask with trailing zeros.
+		{20, []string{"TTLin2"}, "00000000100000000000"},
+		{20, []string{"Opto1"}, "00000001000000000000"},
 	} {
-		got, err := InputMask(tc.names...)
+		got, err := InputMask(tc.width, tc.names...)
 		if err != nil {
-			t.Fatalf("InputMask(%v): %v", tc.names, err)
+			t.Fatalf("InputMask(%d, %v): %v", tc.width, tc.names, err)
 		}
 		if got != tc.want {
-			t.Errorf("InputMask(%v) = %q, want %q", tc.names, got, tc.want)
+			t.Errorf("InputMask(%d, %v) = %q, want %q", tc.width, tc.names, got, tc.want)
 		}
 	}
 
-	if _, err := InputMask("TTLout1"); err == nil {
-		t.Error("InputMask(\"TTLout1\"): want error, an output port is not a trigger")
+	if _, err := InputMask(12, "TTLout1"); err == nil {
+		t.Error("InputMask(12, \"TTLout1\"): want error, an output port is not a trigger")
+	}
+	if _, err := InputMask(8, "TTLin1"); err == nil {
+		t.Error("InputMask(8, …): want error, 8 bits cannot hold 12 input lines")
 	}
 }
 
@@ -41,112 +51,147 @@ func TestOutputMask(t *testing.T) {
 	// Sounder1. TTLout1 — the line the Robotic Key Actuator hangs off — is the
 	// sixth of eight.
 	for _, tc := range []struct {
+		width int
 		names []string
 		want  string
 	}{
-		{[]string{"TTLout1"}, "00000100"},
-		{[]string{"TTLout2"}, "00001000"},
-		{[]string{"TTLout1", "TTLout2"}, "00001100"},
-		{[]string{"Sounder1"}, "00000001"},
+		{8, []string{"TTLout1"}, "00000100"},
+		{8, []string{"TTLout2"}, "00001000"},
+		{8, []string{"TTLout1", "TTLout2"}, "00001100"},
+		{8, []string{"Sounder1"}, "00000001"},
+		{16, []string{"TTLout1"}, "0000010000000000"},
 	} {
-		got, err := OutputMask(tc.names...)
+		got, err := OutputMask(tc.width, tc.names...)
 		if err != nil {
-			t.Fatalf("OutputMask(%v): %v", tc.names, err)
+			t.Fatalf("OutputMask(%d, %v): %v", tc.width, tc.names, err)
 		}
 		if got != tc.want {
-			t.Errorf("OutputMask(%v) = %q, want %q", tc.names, got, tc.want)
+			t.Errorf("OutputMask(%d, %v) = %q, want %q", tc.width, tc.names, got, tc.want)
 		}
 	}
 
-	if _, err := OutputMask("Opto1"); err == nil {
-		t.Error("OutputMask(\"Opto1\"): want error, an input port cannot be pulsed")
+	if _, err := OutputMask(8, "Opto1"); err == nil {
+		t.Error("OutputMask(8, \"Opto1\"): want error, an input port cannot be pulsed")
+	}
+}
+
+func TestWidthsForModel(t *testing.T) {
+	for name, want := range map[string]PortWidths{
+		"elite":    EliteWidths,
+		"Elite":    EliteWidths,
+		"standard": StandardWidths,
+		"pro":      StandardWidths,
+		"entry":    StandardWidths,
+	} {
+		got, err := WidthsForModel(name)
+		if err != nil {
+			t.Fatalf("WidthsForModel(%q): %v", name, err)
+		}
+		if got != want {
+			t.Errorf("WidthsForModel(%q) = %+v, want %+v", name, got, want)
+		}
+	}
+	if _, err := WidthsForModel("deluxe"); err == nil {
+		t.Error("WidthsForModel(\"deluxe\"): want error")
 	}
 }
 
 func TestDSRERow(t *testing.T) {
-	trigger, err := InputMask("TTLin1")
+	// The API Guide's own worked example, section 8.1: Opto1 triggers TTLout1
+	// with a 300 ms RT and a 100 ms duration on a standard box.
+	trigger, err := InputMask(StandardWidths.Inputs, "Opto1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	outputs, err := OutputMask("TTLout1")
+	outputs, err := OutputMask(StandardWidths.Outputs, "TTLout1")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := DSRERow([]string{trigger}, 200, outputs, 500)
+	got, err := DSRERow([]string{trigger}, 300, outputs, 100, StandardWidths)
 	if err != nil {
 		t.Fatalf("DSRERow: %v", err)
 	}
-	// trigger1,trigger2,trigger3,RT,portout,DURATION — the two unused trigger
-	// slots must still be present, filled with 9s.
-	want := "000000000100,999999999999,999999999999,200,00000100,500"
+	want := "000000010000,999999999999,999999999999,300,00000100,100"
 	if got != want {
-		t.Errorf("DSRERow = %q, want %q", got, want)
+		t.Errorf("DSRERow = %q, want the API Guide's example %q", got, want)
 	}
 
-	if _, err := DSRERow(nil, 200, outputs, 500); err == nil {
+	// The same thing on an Elite: wider masks, wider 9s.
+	eTrigger, err := InputMask(EliteWidths.Inputs, "Opto1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eOutputs, err := OutputMask(EliteWidths.Outputs, "TTLout1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = DSRERow([]string{eTrigger}, 300, eOutputs, 100, EliteWidths)
+	if err != nil {
+		t.Fatalf("DSRERow (elite): %v", err)
+	}
+	want = "00000001000000000000,99999999999999999999,99999999999999999999,300,0000010000000000,100"
+	if got != want {
+		t.Errorf("DSRERow (elite) = %q, want %q", got, want)
+	}
+
+	// Mixing widths is the mistake that produces a row the device quietly
+	// refuses, so each width is checked against the model.
+	if _, err := DSRERow([]string{trigger}, 300, outputs, 100, EliteWidths); err == nil {
+		t.Error("DSRERow with standard masks and Elite widths: want error")
+	}
+	if _, err := DSRERow(nil, 200, outputs, 500, StandardWidths); err == nil {
 		t.Error("DSRERow with no trigger: want error")
 	}
-	if _, err := DSRERow([]string{trigger, trigger, trigger, trigger}, 200, outputs, 500); err == nil {
+	if _, err := DSRERow([]string{trigger, trigger, trigger, trigger}, 200, outputs, 500, StandardWidths); err == nil {
 		t.Error("DSRERow with four triggers: want error, a row holds three")
 	}
-	if _, err := DSRERow([]string{"0100"}, 200, outputs, 500); err == nil {
-		t.Error("DSRERow with a short trigger mask: want error")
-	}
-	if _, err := DSRERow([]string{trigger}, 200, "001", 500); err == nil {
-		t.Error("DSRERow with a short output mask: want error")
-	}
-	if _, err := DSRERow([]string{trigger}, 200, outputs, 0); err == nil {
+	if _, err := DSRERow([]string{trigger}, 200, outputs, 0, StandardWidths); err == nil {
 		t.Error("DSRERow with zero duration: want error")
 	}
-	if _, err := DSRERow([]string{trigger}, -1, outputs, 500); err == nil {
+	if _, err := DSRERow([]string{trigger}, -1, outputs, 500, StandardWidths); err == nil {
 		t.Error("DSRERow with negative delay: want error")
 	}
 }
 
 func TestDSRESequence(t *testing.T) {
-	row := "000000000100,999999999999,999999999999,200,00000100,500"
+	row := "000000010000,999999999999,999999999999,300,00000100,100"
 
-	seq, err := DSRESequence([]string{row}, 0)
+	seq, err := DSRESequence(row, MatchPattern, 0)
 	if err != nil {
 		t.Fatalf("DSRESequence: %v", err)
 	}
 
-	// PDCR STYP PATT TIML <dur> + 8 pattern rows + PCCR RUSR.
-	if len(seq) != 5+DSREPatternRows+2 {
-		t.Fatalf("DSRESequence returned %d commands, want %d", len(seq), 5+DSREPatternRows+2)
+	// Section 8.1 of the API Guide, exactly: one row, no padding. The earlier
+	// version of this code padded to eight rows by analogy with event marking,
+	// and the device ignored the program.
+	want := []string{"PDCR", "STYP", "PATT", "TIML", "0", row, "PCCR", "RUSR"}
+	if len(seq) != len(want) {
+		t.Fatalf("DSRESequence returned %d commands (%v), want %d", len(seq), seq, len(want))
 	}
-	for i, want := range []string{"PDCR", "STYP", "PATT", "TIML", "0", row} {
-		if seq[i] != want {
-			t.Errorf("seq[%d] = %q, want %q", i, seq[i], want)
-		}
-	}
-	// The seven rows after the real one are padding, and RUSR is what starts it.
-	for i := 6; i < 5+DSREPatternRows; i++ {
-		if seq[i] != DSREPadRow {
-			t.Errorf("seq[%d] = %q, want the pad row %q", i, seq[i], DSREPadRow)
-		}
-	}
-	if seq[len(seq)-2] != "PCCR" || seq[len(seq)-1] != "RUSR" {
-		t.Errorf("sequence ends with %v, want [PCCR RUSR]", seq[len(seq)-2:])
-	}
-
-	// Every pattern row must have the same field count, padding included, or
-	// the device reads the payload out of step.
-	for _, cmd := range seq[5 : 5+DSREPatternRows] {
-		if n := len(strings.Split(cmd, ",")); n != 6 {
-			t.Errorf("pattern row %q has %d fields, want 6", cmd, n)
+	for i := range want {
+		if seq[i] != want[i] {
+			t.Errorf("seq[%d] = %q, want %q", i, seq[i], want[i])
 		}
 	}
 
-	if _, err := DSRESequence(nil, 0); err == nil {
-		t.Error("DSRESequence with no rows: want error")
+	// INDI takes the place of PATT and nothing else moves.
+	seq, err = DSRESequence(row, MatchIndividual, 0)
+	if err != nil {
+		t.Fatalf("DSRESequence(INDI): %v", err)
 	}
-	rows := make([]string, DSREPatternRows+1)
-	for i := range rows {
-		rows[i] = row
+	if seq[2] != "INDI" {
+		t.Errorf("seq[2] = %q, want INDI", seq[2])
 	}
-	if _, err := DSRESequence(rows, 0); err == nil {
-		t.Errorf("DSRESequence with %d rows: want error, a PATT payload holds %d", len(rows), DSREPatternRows)
+
+	if _, err := DSRESequence("", MatchPattern, 0); err == nil {
+		t.Error("DSRESequence with an empty row: want error")
+	}
+	if _, err := DSRESequence(row, "NOPE", 0); err == nil {
+		t.Error("DSRESequence with an unknown match mode: want error")
+	}
+	// "Note there should be no spaces after the commas (,)."
+	if _, err := DSRESequence(strings.Replace(row, ",", ", ", 1), MatchPattern, 0); err == nil {
+		t.Error("DSRESequence with a space after a comma: want error")
 	}
 }
