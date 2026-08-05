@@ -17,6 +17,7 @@ binaries/
 /bbtk-send-command
 /bbtk-set-smoothing
 /bbtk-set-thresholds
+/bbtk-trigger-response
 /command-event-marking
 /events-stats
 /get-serial-port-list
@@ -30,6 +31,7 @@ binaries/
 /cmd/bbtk-send-command/bbtk-send-command
 /cmd/bbtk-set-smoothing/bbtk-set-smoothing
 /cmd/bbtk-set-thresholds/bbtk-set-thresholds
+/cmd/bbtk-trigger-response/bbtk-trigger-response
 /cmd/events-stats/events-stats
 /cmd/get-serial-port-list/get-serial-port-list
 /cmd/ibbtk/ibbtk

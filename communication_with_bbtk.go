@@ -491,6 +491,42 @@ const (
 	keyCtrlC = 3
 )
 
+// waitForStopKey prints prompt, then blocks until the user asks to stop: Esc or
+// Ctrl-C when stdin is a terminal, Enter when it is not (piped or scripted).
+// It returns the line ending that must be used for anything printed afterwards
+// — raw mode clears OPOST and with it the ONLCR translation, so a bare \n would
+// leave the cursor in mid-line and staircase the output. See LineEnding.
+func waitForStopKey(prompt string) string {
+	oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd()))
+	if rawErr != nil {
+		// stdin is not a terminal: fall back to waiting for Enter.
+		fmt.Printf("%s Press Enter to stop.\n", prompt)
+		waitForByte(func(c byte) bool { return c == '\n' || c == '\r' })
+		return "\n"
+	}
+	defer term.Restore(int(os.Stdin.Fd()), oldState)
+
+	eol := LineEnding(os.Stdout, true)
+	fmt.Printf("%s Press Esc or Ctrl-C to stop.%s", prompt, eol)
+	waitForByte(func(c byte) bool { return c == keyEsc || c == keyCtrlC })
+	return eol
+}
+
+// waitForByte reads stdin one byte at a time until stop says so, or until the
+// stream ends.
+func waitForByte(stop func(byte) bool) {
+	buf := make([]byte, 1)
+	for {
+		n, err := os.Stdin.Read(buf)
+		if err != nil || n == 0 {
+			return
+		}
+		if stop(buf[0]) {
+			return
+		}
+	}
+}
+
 // CaptureOptions tunes a single call to CaptureEvents. The zero value is the
 // interactive default: countdown on, keyboard abort on, progress on stdout.
 type CaptureOptions struct {
@@ -801,54 +837,7 @@ func (b *bbtkv3) EventMarking(pattern [8]string) error {
 		return fmt.Errorf("EventMarking: RUEM: %w", err)
 	}
 
-	// Wait for the user to press 'x' / 'X'.
-	stopCh := make(chan struct{}, 1)
-
-	// Lines printed while raw mode holds need eol, not a bare \n; see LineEnding.
-	eol := "\n"
-
-	if oldState, rawErr := term.MakeRaw(int(os.Stdin.Fd())); rawErr == nil {
-		defer term.Restore(int(os.Stdin.Fd()), oldState)
-		eol = LineEnding(os.Stdout, true)
-		fmt.Print("Event marking running. Press Esc or Ctrl-C to stop.")
-		go func() {
-			buf := make([]byte, 1)
-			for {
-				n, err := os.Stdin.Read(buf)
-				if err != nil || n == 0 {
-					return
-				}
-				if buf[0] == keyEsc || buf[0] == keyCtrlC {
-					select {
-					case stopCh <- struct{}{}:
-					default:
-					}
-					return
-				}
-			}
-		}()
-	} else {
-		// stdin is not a terminal (e.g. piped): fall back to waiting for Enter.
-		fmt.Println("Event marking running. Press Enter to stop.")
-		go func() {
-			buf := make([]byte, 1)
-			for {
-				n, err := os.Stdin.Read(buf)
-				if err != nil || n == 0 {
-					return
-				}
-				if buf[0] == '\n' || buf[0] == '\r' {
-					select {
-					case stopCh <- struct{}{}:
-					default:
-					}
-					return
-				}
-			}
-		}()
-	}
-
-	<-stopCh
+	eol := waitForStopKey("Event marking running.")
 	fmt.Printf("%sStopping event marking...%s", eol, eol)
 
 	if err := b.SendBreakChar(); err != nil {

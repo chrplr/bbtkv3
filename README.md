@@ -14,6 +14,7 @@ This page describes a set of command-line tools that streamline the testing of t
 | `bbtk-capture` | Captures events for a given duration (`-d`) with a given smoothing mask (`-s`) and exports them to `.dat`, `-dscevents.csv`, and `-events.csv` files |
 | `bbtk-input-check` | Streams live input state from the device (ICHK); press `Esc` to stop |
 | `bbtk-event-marking` | Configures and runs the command-event marking program on the device; press `Esc` to stop |
+| `bbtk-trigger-response` | Loops in firmware: waits for a trigger input, then pulses an output line after a delay (drives the Robotic Key Actuator); press `Esc` to stop |
 | `bbtk-adjust-thresholds` | Opens the interactive sensor threshold adjustment menu on the device |
 | `bbtk-get-thresholds` | Reads and prints the current sensor thresholds |
 | `bbtk-set-thresholds` | Writes eight threshold (sensitivity) values to the device |
@@ -346,7 +347,8 @@ Set `BBTK_PORT` accordingly there.
 When nothing at all resolves, the tools differ: `bbtk-capture`,
 `bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds` and
 `bbtk-set-smoothing` try `/dev/ttyUSB0`, while `ibbtk`, `bbtk-send-command`,
-`bbtk-input-check` and `bbtk-event-marking` stop with an error.
+`bbtk-input-check`, `bbtk-event-marking` and `bbtk-trigger-response` stop with an
+error.
 
 During the countdown, press `Esc` (no Enter needed) to abort the capture early. The program sends a stop command to the device and exits cleanly.
 
@@ -601,6 +603,84 @@ Options:
   -b int      baudrate (default 115200)
   -V          display version and exit
 ```
+
+# bbtk-trigger-response — answer an input event with a delayed output pulse
+
+`bbtk-trigger-response` puts the BBTK into **Digital Stimulus Response Echo**
+(DSRE) mode: the device waits for an event on the trigger input line(s), waits
+`-rt` milliseconds, raises the output line(s) for `-d` milliseconds, lowers them,
+and goes back to waiting — indefinitely, until you press `Esc`.
+
+The loop runs entirely in the device's firmware. Once `RUSR` has started it, the
+host plays no part in the timing, so the delay and the pulse width are not
+exposed to USB latency or to the operating system's scheduler. This is the whole
+reason to use it rather than a loop in your own program.
+
+```bash
+bbtk-trigger-response                       # TTLin2 → 200 ms → TTLout1 for 500 ms
+bbtk-trigger-response -n                    # print the command sequence, touch nothing
+bbtk-trigger-response -i Opto1 -rt 285 -d 105
+```
+
+```
+Options:
+  -p string   serial port (or set BBTK_PORT)
+  -b int      baudrate (default 115200)
+  -i string   comma-separated trigger input port(s) (default "TTLin2")
+  -o string   comma-separated output port(s) to pulse (default "TTLout1")
+  -rt int     delay from trigger to pulse onset, in ms (default 200)
+  -d int      pulse duration, in ms (default 500)
+  -n          dry run: print the command sequence and exit without opening the port
+  -V          display version and exit
+```
+
+Input names come from the 12 input lines (`Keypad1`–`4`, `Opto1`–`4`,
+`TTLin1`–`2`, `Mic1`–`2`), output names from the 8 output lines (`ActClose1`–`4`,
+`TTLout1`–`2`, `Sounder1`–`2`). Naming several of either is allowed: `-o
+TTLout1,TTLout2` pulses both at once.
+
+As with `bbtk-event-marking`, a one-second pause precedes each protocol command
+so the device can digest each step; expect about ten seconds between launching
+the tool and the program actually running.
+
+## Driving the Robotic Key Actuator
+
+The defaults are the RKA case. The RKA is a solenoid wired to **TTL Out 1**
+through the 3.5 mm lead on the TTL/ASC extension port, so "press the key" is just
+"raise `TTLout1`" — there is no separate actuator protocol. Per the *Robotic Key
+Actuator Guide*, do not wire anything else to TTL In 1 or TTL Out 1 while the RKA
+is connected.
+
+```bash
+bbtk-trigger-response -i TTLin2 -o TTLout1 -rt 200 -d 500
+```
+
+The trigger defaults to **TTL In 2**, not TTL In 1: TTL In 1 is the line the
+Breakout Board's calibration button sits on, and the guide says to leave both it
+and TTL Out 1 unwired while the RKA is connected. Naming `TTLin1` with `-i` still
+works — the tool only warns — but on an RKA rig it means feeding the trigger into
+the calibration line.
+
+Three things to keep in mind:
+
+- **The RKA is mechanical, so the numbers you program are not the numbers you
+  get.** There is a start-up latency (~15 ms in the guide's example) between the
+  TTL edge and the plunger actually closing the key, and the press duration comes
+  out a few ms short. Calibrate against the Breakout Board's calibration button
+  and subtract: to obtain a real 300 ms / 100 ms press, program `-rt 285 -d 105`.
+  Recalibrate whenever you reposition the plunger, and keep the air gap identical
+  to the calibration run.
+- **Do not re-trigger while a response is in progress.** One cycle occupies the
+  actuator for `-rt` + `-d` ms — 700 ms with the defaults — plus recoil time; the
+  tool prints that figure as a reminder. Triggering inside that window gives
+  meaningless timings and stresses the mechanism.
+- **The documented ranges are 50–10000 ms for the delay and 50–1000 ms for the
+  duration.** Outside them the tool warns but still runs, since DSRE itself is
+  general.
+
+To verify the whole chain without moving anything, run `-n` first and check the
+sequence against the BBTK API Guide, then run the real thing with the RKA's own
+24 V supply switched off and watch the TTL Out 1 LED on the front panel.
 
 # bbtk-send-break — unwedge a device left streaming
 

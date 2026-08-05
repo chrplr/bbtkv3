@@ -9,14 +9,14 @@ Command-line tools suite for the **Black Box ToolKit v3 (BBTK v3)** — a hardwa
 ## Build & Test Commands
 
 ```bash
-make build       # Build all 13 commands into _build/
+make build       # Build all 14 commands into _build/
 make test        # Run tests (verbose)
 make all         # Build, then test
 make clean       # Remove _build/ and binaries/
 go test ./...    # Run all tests directly
 ```
 
-**Cross-platform distribution** (outputs to `binaries/` as `bbtkv3-{os}-{arch}-{version}.zip`, one zip per platform holding all 13 binaries):
+**Cross-platform distribution** (outputs to `binaries/` as `bbtkv3-{os}-{arch}-{version}.zip`, one zip per platform holding all 14 binaries):
 ```bash
 make dist                 # darwin/linux/windows × amd64/arm64
 make dist VERSION=v1.2.3  # override the version (defaults to `git describe --tags --abbrev=0`)
@@ -42,6 +42,7 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 - `communication_with_bbtk.go` — Serial protocol: opening the port, sending commands, reading raw event data from the device
 - `events.go` — Data structures (`DSCEvent`, `Event`), parsing raw device output, and CSV export/import
 - `thresholds.go` — `Thresholds` struct (8 × uint8, range 0–127) and parsing
+- `dsre.go` — Digital Stimulus Response Echo: port-name→bitmask helpers (`InputMask`, `OutputMask`), pattern-row and command-sequence builders (`DSRERow`, `DSRESequence`), and `DSREProgram`
 - `SmoothMask.go` — `SmoothingMask` struct (6 boolean sensor channels), parsing, and the smoothing duration correction (`Enabled`, `CorrectedDuration`, `DefaultSmoothingDurationOffsetMs`)
 
 **CLI tools (`cmd/`)**:
@@ -60,6 +61,7 @@ The module is `github.com/chrplr/bbtkv3`. Root-level `.go` files form a shared l
 | `bbtk-send-break` | Sends the break character to stop a running device operation; recovers a box left streaming by a killed tool. Deliberately does not handshake first — `Connect()` is what fails on a wedged device |
 | `bbtk-event-marking` | Sends the PDCE/STYP/PATT/TIML sequence to run an event-marking program |
 | `bbtk-input-check` | Streams live input state (`ICHK`) until Esc |
+| `bbtk-trigger-response` | Runs a DSRE program: trigger input → delay → output pulse, looping until Esc. Defaults drive the Robotic Key Actuator on TTLout1 |
 
 The canonical list is `CMDS` in the Makefile — keep it in sync when adding a command under `cmd/`.
 

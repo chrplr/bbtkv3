@@ -64,7 +64,9 @@ Timings are in ms
 
 
 
-## Digital Stimulus Response Echo (DSRE)
+## Digital Stimulus Response Echo (DSRE) — DONE
+
+Implemented in `dsre.go` and exposed by `bbtk-trigger-response`.
 
 This mode also to send a signal on a TTLout line when an event is detected on an input line.
 
