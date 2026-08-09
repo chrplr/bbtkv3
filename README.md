@@ -3,10 +3,28 @@ Command-line interface for the Black Box ToolKit v3
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19551604.svg)](https://doi.org/10.5281/zenodo.19551604)
 
-The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)  is a device that allows psychologists to measure the timing of audio-visual stimuli with sub-millisecond accuracy. It replaces a digital oscilloscope, capturing activity on sound and visual sensors and TTL signals, and a signal generator,
- generating sounds or TTL signals.
+The [Black Box ToolKit](https://www.blackboxtoolkit.com/bbtkv3.html)
+ is a device that allows psychologists to measure the timing of
+ audio-visual stimuli with sub-millisecond accuracy. It replaces a
+ digital oscilloscope, capturing activity on sound and visual sensors
+ and TTL signals, and a signal generator, generating sounds or TTL
+ signals.
 
-This page describes a set of command-line tools that streamline the testing of time-critical psychology experiments:
+This repository contains a set of command-line tools that run under
+macOS, Linux or Windows (see
+<https://github.com/chrplr/bbtkv3/releases>), and control the BBTKv3,
+allowing to automate the collection of timing data. A
+[paper](https://github.com/chrplr/bbtkv3/blob/main/paper/bbtkv3-paper.pdf)
+describes these tools.
+
+The source code (under a GPL-3.0 License) is at <https://github.com/chrplr/bbtkv3>. 
+Instructions for compilation are provided below.
+
+These programs relies on a Go module, `github.com/chrplr/bbtkv3`, which
+encapsulates a subset of the commands documented in *The BBTKv2 API
+Guide*. This go module can be used to drive the BBTK from programs
+written in Go.
+
 
 | Tool | Description |
 |------|-------------|
@@ -24,15 +42,6 @@ This page describes a set of command-line tools that streamline the testing of t
 | `get-serial-port-list` | Lists all available serial ports on the host machine |
 | `ibbtk` | Interactive menu-driven shell — keeps a persistent connection and exposes all of the above in a nested menu |
 | `events-stats` | Computes descriptive statistics, ASCII histograms, and a Markdown report with PNG histogram and timeline plots from the `-events.csv` files produced by `bbtk-capture` |
-
-
-A [paper](https://github.com/chrplr/bbtkv3/blob/main/paper/bbtkv3-paper.pdf) describes these tools. 
-
-Binaries for different operating systems are available at <https://github.com/chrplr/bbtkv3/releases>,
-
-The source code (under a GPL-3.0 License) is at <https://github.com/chrplr/bbtkv3>. Instructions for compilation are provided below.
-
-This program relies on a Go module, `github.com/chrplr/bbtkv3`, which encapsulates a small subset of the commands documented in *The BBTKv2 API Guide* (in the future, we might implement more functions). This go module can be used to drive the BBTK from programs written in Go.
 
 
 # Principle of operation
@@ -105,26 +114,47 @@ This writes `session1-001.dat`, `session1-001-dscevents.csv` and
 found on the device — so every capture carries a record of the settings it was
 made under. Analyse the result with `events-stats`.
 
-If nothing is detected, the capture still succeeds and warns you: that is the
-symptom of step 2 having been done against the wrong stimulus, or of a
-photodiode that has drifted off its square.
+It is possible to pass the stimulation program as a command line
+argument to `bbtk-capture`, in which case this program will be launched just after
+the capture starts.
+
 
 # Usage
 
-The tools are meant to be ran on the command line. You must therefore open a Terminal to execute them (e.g., under Windows, start `cmd` or `Powershell`). 
+You must first open a Terminal (e.g., under Windows, start `cmd` or `Powershell`). 
 
 Provided the tools are in the PATH (see below), you can just type:
 
 ```bash
-$ bbtk-detect-port
-BBTK found at  COM4
-$ bbtk-adjust-thresholds -p COM4
-$ bbtk-capture -p COM4 -d 120 session1
-... 
-``` 
+$ bbtk-capture -d 120 session1
+...
+```
 
-To launch a 2-min acquisition with output files named `session1-001.dat`, `session1-001-dscevents.csv`, and `session1-001-events.csv`.
-The sequence number is incremented automatically (`-001`, `-002`, …) so previous recordings are never overwritten.
+which launches a 2-min acquisition with output files named `session1-001.dat`,
+`session1-001-dscevents.csv`, and `session1-001-events.csv`. The sequence number
+is incremented automatically (`-001`, `-002`, …) so previous recordings are
+never overwritten.
+
+On Linux you do not normally have to say which serial port the device is on:
+every tool finds it by itself through the `/dev/serial/by-id/*BBTK*` symlink.
+`bbtk-detect-port` is there for the cases where that does not apply — macOS and
+Windows, which have no `/dev/serial/by-id`, or a box that is not being found —
+and you only need it once, to learn the name to put in `BBTK_PORT`:
+
+```bash
+$ bbtk-detect-port
+Scanning [COM3 COM4] for a BBTK...
+BBTK found at COM4
+$ set BBTK_PORT=COM4
+$ bbtk-adjust-thresholds
+$ bbtk-capture -d 120 session1
+...
+```
+
+Note that it identifies the device by opening every serial port and sending
+`CONN`, so it disturbs whatever else is attached; give it a port list
+(`bbtk-detect-port COM3 COM4`) to narrow the scan. See *Selecting the serial
+port* below.
 
 
 ```bash
@@ -347,10 +377,8 @@ Set `BBTK_PORT` accordingly there.
 When nothing at all resolves, the tools differ: `bbtk-capture`,
 `bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds` and
 `bbtk-set-smoothing` try `/dev/ttyUSB0`, while `ibbtk`, `bbtk-send-command`,
-`bbtk-input-check`, `bbtk-event-marking` and `bbtk-trigger-response` stop with an
-error.
-
-During the countdown, press `Esc` (no Enter needed) to abort the capture early. The program sends a stop command to the device and exits cleanly.
+`bbtk-input-check`, `bbtk-event-marking`, `bbtk-trigger-response` and
+`bbtk-send-break` stop with an error.
 
 
 
@@ -467,9 +495,8 @@ for f in bbtk-* ibbtk-* events-stats-* get-serial-port-list-*; do
     mv "$f" ~/bin/"$(echo "$f" | sed -E 's/-(darwin|linux|windows)-(amd64|arm64)-v?[0-9.]+$//')"
 done
 
-#run
-bbtk-detect-port
-bbtk-capture -p /dev/ttyACM0 -d 30 session1
+#run — the port is found automatically via /dev/serial/by-id
+bbtk-capture -d 30 session1
 ```
 # ibbtk — interactive shell
 
@@ -483,7 +510,7 @@ ibbtk -p COM4                 # Windows
 ibbtk -p /dev/cu.usbserial-BBTKXXXX   # macOS
 ```
 
-The port can also be set via the `BBTK_PORT` environment variable, in which case `-p` can be omitted.
+`-p` can be omitted whenever the port resolves on its own — on Linux it normally does, via the by-id symlink; elsewhere set `BBTK_PORT`. See *Selecting the serial port* above. Unlike `bbtk-capture`, `ibbtk` has no built-in fallback: if nothing resolves it stops with an error rather than guessing `/dev/ttyUSB0`.
 
 ```
 Options:
@@ -830,7 +857,7 @@ All time values are in milliseconds.
 ## Usage
 
 ```
-events-stats [-event1 TYPE] [-detect-outliers MS] [-no-md] file1-events.csv [file2-events.csv ...]
+events-stats [-event1 TYPE] [-detect-outliers MS] [-no-md] [-no-html] <file-events.csv> [file2-events.csv ...]
 ```
 
 Multiple files are pooled before computing statistics, which is useful when you have repeated capture sessions.
@@ -948,9 +975,12 @@ For the BBTK to be recognized as a serial device, the module `ftdi_sio` must be 
 
     sudo modprobe ftdi_sio
 
-To determine which serial port the BBTK is attached toi (`/dev/ttyACM0`, `/dev/ttyUSB0`, ...), run: 
+The v3 uses an FTDI chip, so it appears as `/dev/ttyUSBn` (the v2, an mbed
+board, appears as `/dev/ttyACMn`). You normally do not need the name: udev also
+creates `/dev/serial/by-id/*BBTK*`, and the tools resolve that themselves. To
+see what was attached anyway, run:
 
-    sudo dmesg -w 
+    sudo dmesg -w
 
 | :zap: MacOS X |
 |---------------|
