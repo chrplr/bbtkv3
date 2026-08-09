@@ -11,6 +11,12 @@ CMDS := bbtk-capture bbtk-detect-port bbtk-adjust-thresholds \
 PLATFORMS ?= darwin linux windows
 ARCHS     ?= amd64 arm64
 
+# Where `make install` puts the binaries. Override either one, e.g.
+#   make install PREFIX=/usr/local        (needs sudo)
+#   make install BINDIR=/opt/bbtk/bin
+PREFIX ?= $(HOME)/.local
+BINDIR ?= $(PREFIX)/bin
+
 GIT_HASH   := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GO_SOURCES := $(shell find . -name '*.go' -not -path './$(BUILD_DIR)/*' -not -path './$(DIST_DIR)/*') go.mod go.sum
 
@@ -48,6 +54,24 @@ clean:
 	@echo "Cleaning..."
 	@rm -rf $(BUILD_DIR) $(DIST_DIR)
 
+# ── Installation ──────────────────────────────────────────────────────────────
+
+install: build
+	@echo "Installing $(words $(CMDS)) commands into $(BINDIR)..."
+	@mkdir -p $(BINDIR)
+	@$(foreach cmd,$(CMDS),install -m 755 $(BUILD_DIR)/$(cmd) $(BINDIR)/$(cmd);)
+	@case ":$$PATH:" in \
+	  *":$(BINDIR):"*) ;; \
+	  *) echo "  Warning: $(BINDIR) is not in your PATH."; \
+	     echo "           Add it, e.g.  export PATH=\"$(BINDIR):\$$PATH\"" ;; \
+	esac
+	@echo "Done."
+
+uninstall:
+	@echo "Removing commands from $(BINDIR)..."
+	@$(foreach cmd,$(CMDS),rm -f $(BINDIR)/$(cmd);)
+	@echo "Done."
+
 # ── Cross-platform distribution ───────────────────────────────────────────────
 
 # Windows binaries need a .exe suffix; the other platforms get nothing.
@@ -84,4 +108,4 @@ release: dist
 	    --title "$(VERSION)" \
 	    --generate-notes
 
-.PHONY: all build test clean dist release
+.PHONY: all build test clean install uninstall dist release

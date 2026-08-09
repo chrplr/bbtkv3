@@ -1028,6 +1028,21 @@ make build
 
 This will generate executables in `_build/`.
 
+To copy them somewhere on your `PATH`:
+
+```bash
+make install
+```
+
+This installs the tools into `~/.local/bin` (creating it if needed) and warns if that directory is not on your `PATH`. Change the destination with `PREFIX` or `BINDIR`:
+
+```bash
+sudo make install PREFIX=/usr/local   # -> /usr/local/bin
+make install BINDIR=/opt/bbtk/bin
+```
+
+`make uninstall` (with the same `PREFIX`/`BINDIR`) removes them again.
+
 For cross-compiling:
 
 ```bash

@@ -16,6 +16,8 @@ make clean       # Remove _build/ and binaries/
 go test ./...    # Run all tests directly
 ```
 
+**Installation**: `make install` builds, then copies the 14 binaries into `$(BINDIR)`, default `$(PREFIX)/bin` = `~/.local/bin`, and warns when that directory is absent from `PATH`. Override with `make install PREFIX=/usr/local` or `BINDIR=...`; `make uninstall` takes the same variables.
+
 **Cross-platform distribution** (outputs to `binaries/` as `bbtkv3-{os}-{arch}-{version}.zip`, one zip per platform holding all 14 binaries):
 ```bash
 make dist                 # darwin/linux/windows × amd64/arm64
