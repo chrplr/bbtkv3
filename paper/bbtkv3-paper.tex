@@ -132,7 +132,9 @@ Tool & Description \\
 \texttt{bbtk-set-thresholds} & Writes new threshold values to the device. \\
 \texttt{bbtk-set-smoothing} & Enables or disables smoothing on individual sensor channels. \\
 \texttt{bbtk-event-marking} & Configures the device for real-time event marking. \\
+\texttt{bbtk-trigger-response} & Programs the device to answer a trigger on an input line with a delayed pulse on an output line, timed entirely in firmware. \\
 \texttt{bbtk-send-command} & Sends raw protocol commands read from standard input and prints the device's replies. \\
+\texttt{bbtk-send-break} & Sends the break character to interrupt a running device operation and recover a device left streaming. \\
 \texttt{get-serial-port-list} & Lists the serial ports available on the host. \\
 \texttt{events-stats} & Performs statistical analysis on captured timing data. \\
 \texttt{ibbtk} & An interactive shell providing access to all device functions. \\
@@ -165,23 +167,65 @@ transitions on the 12 input lines (4 optical, 2 microphone, 2 TTL, and
 Listing~\ref{lst:capture} below.
 
 \begin{lstlisting}[language=bash, frame=none, numbers=none, caption={Example capture command}, label={lst:capture}, basicstyle=\ttfamily\small]
-# Locate the device
-bbtk-detect-port
 # Capture for 60 seconds into session1-001*
-export BBTK_PORT=/dev/ttyUSB0
+# (the serial port is located automatically)
 bbtk-capture -d 60 session1
 # analyse measurements
 events-stats session1-001-events.csv
 \end{lstlisting}
 
+A practical difficulty is that the stimulus must begin \emph{after} the
+device has started recording and end \emph{before} the window closes,
+yet the instant at which recording begins cannot be predicted: it
+follows a fixed sequence of paced commands and an erasure of the
+device's internal memory whose duration depends on whether a full format
+or only an erase of the used sectors is required. Waiting a fixed amount
+of time is therefore unreliable. The suite offers two ways of
+synchronising on that instant instead. The simpler is to let
+\texttt{bbtk-capture} start the stimulus itself: everything following a
+\texttt{--} separator on its command line is taken as the argument
+vector of a child process, launched at the exact moment the device
+begins to record, as in Listing~\ref{lst:sync}. No shell is interposed,
+so the stimulus keeps its own options unambiguously, and progress
+messages move to standard error so that standard output carries only the
+stimulus's own. A stimulus that exits with a non-zero status aborts the
+capture; one still running when the window closes is terminated, but the
+data are downloaded and saved regardless, since the window ran its full
+length and the recording is therefore valid.
+
+\begin{lstlisting}[language=bash, frame=none, numbers=none, caption={Running a stimulus inside the capture window}, label={lst:sync}, basicstyle=\ttfamily\small]
+bbtk-capture -d 120 session1 -- ./my-stimulus -cycles 1000
+\end{lstlisting}
+
+When the stimulus cannot be a child process --- because it is already
+running, because it is driven from another language, or because it
+executes on a different machine --- \texttt{bbtk-capture} prints the line
+\texttt{BBTK-CAPTURE-READY duration=\textit{N}} on its standard output,
+on a line of its own, at the instant recording starts. An external
+driver launches the capture in the background, blocks until that line
+appears, and only then triggers the stimulus. Nothing earlier in the
+output identifies that instant, since the messages preceding it are
+emitted several seconds before the recording actually begins. A wrapper
+can confirm that the binary it is about to drive supports the marker
+before touching the device, because \texttt{bbtk-capture -V} advertises
+it.
+
 At the end of the event capture, data are downloaded from the BBTK
 onto the host PC and saved for further analyses. Among the saved
 files, a \texttt{.dat} file contains the raw output of the BBTK and an
-\texttt{-events.csv} file consists of a table with three columns:
-\texttt{type, onset, duration}, where \texttt{type} identifies the
-sensor (\texttt{Opto1}, \texttt{Mic1}, \texttt{TTLin1}, \ldots), and
-\texttt{onset} and \texttt{duration} are expressed in milliseconds
-relative to the start of the capture.
+\texttt{-events.csv} file consists of a table with four columns:
+\texttt{type, onset, duration, durationCorrected}, where \texttt{type}
+identifies the sensor (\texttt{Opto1}, \texttt{Mic1}, \texttt{TTLin1},
+\ldots), and the remaining columns are expressed in milliseconds
+relative to the start of the capture. \texttt{duration} is the value
+reported by the device, left unaltered; \texttt{durationCorrected} has
+the smoothing tail (see the Limitations section) subtracted on those
+channels for which smoothing was actually enabled during the capture,
+and repeats \texttt{duration} elsewhere. Onsets need no such correction,
+since smoothing extends the trailing edge of a detection rather than
+delaying its onset.
+
+\subsection{Statistical Analysis}
 
 This CSV file can easily be imported in a spreadsheet, a Python or R
 notebook for inspection. Nevertheless, we provide a command-line tool,
@@ -197,6 +241,26 @@ reference event (e.g., TTL trigger) and a target event (e.g.,
 photodiode detection). Figure~\ref{fig:stats} shows an example of the
 output from a simple stimulation program (1 frame on --- 2 frames off)
 run on a Raspberry Pi 4.
+
+Two aspects of how these quantities are obtained bear on their
+interpretation. First, pairing is by \emph{nearest following} event: for
+each occurrence of the reference type, the tool locates the first event
+of each other type whose onset is not earlier, and reports the
+difference. The pairing is not exclusive, so two reference events
+occurring before the sensor responds are both paired with the same
+target, and a reference event with no subsequent event of a given type
+contributes nothing --- which is why the number of paired observations
+can fall short of the number of reference events. Second, the reported
+percentiles are computed after an optional outlier filter, enabled by
+default, which discards values lying more than 50~ms from the median of
+their own series; the threshold is set with \texttt{-detect-outliers}
+and disabled by passing zero. Excluded values are always listed in the
+output rather than silently dropped, so that the effect of the filter on
+any reported figure remains auditable. The filter is treated as
+inapplicable, and the series left untouched, when \emph{every} value
+would be excluded --- the normal situation for inter-onset intervals,
+whose spacing is set by the experimental design and is typically
+measured in seconds rather than milliseconds.
 
   \begin{figure*}
     % The arrow is rendered in a one-character-wide box so that the
@@ -322,22 +386,31 @@ rate.
 \label{sec:limitations}
 
 The suite implements the subset of the BBTK serial protocol
-\parencite{plant2016} needed to configure the device and to record from
-it: the capture command, the input-check and event-marking commands, and
-the commands that read and write sensor thresholds and the smoothing
-mask. It is, in its present state, an \emph{input-side} tool. Although
-the BBTK is also a signal generator, able to drive sounders, TTL outputs
-and actuator closures, none of the corresponding commands are currently
-implemented, and the suite cannot be used to generate stimuli. Users who
-need the BBTK to act as a source rather than an observer must fall back
-on the vendor's software.
+\parencite{plant2016} needed to configure the device, to record from it,
+and to make it respond: the capture command, the input-check,
+event-marking and digital stimulus-response commands, and the commands
+that read and write sensor thresholds and the smoothing mask. Output is
+supported only in its \emph{reactive} form: \texttt{bbtk-trigger-response}
+can raise any of the eight output lines (two TTL outputs, four actuator
+closures and two sounders) a programmed delay after a trigger arrives on
+an input line, with the delay and the pulse width timed by the device's
+own firmware rather than by the host. What the suite does not provide is
+autonomous stimulus generation --- there is no way to make the device
+emit a sound or a pulse on a schedule of its own, independently of an
+input event. Users who need the BBTK to act as a free-running source
+must fall back on the vendor's software.
 
 Two further constraints are worth noting. First, the device is driven
 over a serial protocol whose command set is documented for the BBTK
 v2 \parencite{plant2016}; commands specific to later firmware are not
 covered. Second, when smoothing is enabled on an input line, the
 durations reported by the device for that line are inflated by
-20~ms, which must be subtracted before interpretation.
+approximately 20~ms, which must be subtracted before interpretation.
+\texttt{bbtk-capture} does this automatically in the
+\texttt{durationCorrected} column of its output, but the figure is a
+measurement made on a single device rather than a constant of the
+hardware, and laboratories needing a tighter bound should re-measure it
+on their own unit.
 
 \section{Implementation and Availability}
 \label{sec:availability}
