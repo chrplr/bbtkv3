@@ -78,11 +78,11 @@ by providing an external hardware reference for timing
 measurements. It acts as a digital oscilloscope and signal generator,
 capable of capturing activity on light and sound sensors, as well as
 TTL signals, with sub-millisecond precision. The typical experimental
-setup involves three components: a) A \textbf{stimulation device}
+setup involves three components: a) A \emph{stimulation device}
 (e.g., a computer) running the experimental paradigm; b) The
-\textbf{BBTK hardware} with input sensors (photodiodes, microphones)
+\emph{BBTK hardware} with input sensors (photodiodes, microphones)
 and TTL inputs/outputs connected to the stimulation device; c) A
-\textbf{host computer} (which may be the same as the stimulation
+\emph{host computer} (which may be the same as the stimulation
 device with our software) driving the BBTK and recording the data (see
 Figure~\ref{fig:operation}).
 
@@ -90,7 +90,7 @@ Figure~\ref{fig:operation}).
     \centering
     \includegraphics[width=0.8\textwidth]{bbtk-setup.png}
     \caption{Principle of operation: The BBTK acts as an independent
-      observer of the stimulation device's outputs. Here an optical
+      observer of the stimulation device's outputs. An optical
       sensor detects when the illumination of the screen reaches a
       certain threshold. Here, the \texttt{bbtk-capture} program that drives
       the BBTK device during events capture runs on the stimulation
@@ -109,106 +109,80 @@ event capture can run simultaneously on the same computer that runs
 the stimulation.
 
 
-\subsection{Software Suite Components}
 
-The \texttt{bbtkv3} suite consists of several modular CLI tools,
-summarized in Table~\ref{tab:tools}. This modularity allows
-researchers to use only the components they need or to chain them
-together in scripts.
-
-\begin{table*}[ht]
-\caption{The \texttt{bbtkv3} toolset}
-\label{tab:tools}
-\small
-\begin{tabular}{@{}lp{0.7\textwidth}@{}}
-\toprule
-Tool & Description \\
-\midrule
-\texttt{bbtk-detect-port} & Scans serial ports to locate the connected BBTK. \\
-\texttt{bbtk-capture} & Captures events for a specified duration and exports them to CSV and binary formats. \\
-\texttt{bbtk-input-check} & Provides a live stream of sensor states for real-time validation. \\
-\texttt{bbtk-adjust-thresholds} & Interactive menu for sensor sensitivity calibration. \\
-\texttt{bbtk-get-thresholds} & Reads current sensor thresholds from the device. \\
-\texttt{bbtk-set-thresholds} & Writes new threshold values to the device. \\
-\texttt{bbtk-set-smoothing} & Enables or disables smoothing on individual sensor channels. \\
-\texttt{bbtk-event-marking} & Configures the device for real-time event marking. \\
-\texttt{bbtk-trigger-response} & Programs the device to answer a trigger on an input line with a delayed pulse on an output line, timed entirely in firmware. \\
-\texttt{bbtk-send-command} & Sends raw protocol commands read from standard input and prints the device's replies. \\
-\texttt{bbtk-send-break} & Sends the break character to interrupt a running device operation and recover a device left streaming. \\
-\texttt{get-serial-port-list} & Lists the serial ports available on the host. \\
-\texttt{events-stats} & Performs statistical analysis on captured timing data. \\
-\texttt{ibbtk} & An interactive shell providing access to all device functions. \\
-\bottomrule
-\end{tabular}
-\end{table*}
 
 \section{Core Functionality}
 \label{sec:functionality}
 
-\subsection{Calibration and Monitoring}
+Listing~\ref{lst:capture} provides an example of a recording session. Three commands are used: bbtk-set-threshold, bbtk-capture and events-stats
 
-Proper calibration of sensor thresholds is important for reliable
-data. The \texttt{bbtk-adjust-thresholds} and
-\texttt{bbtk-input-check} tools provide researchers with feedback on
-sensor activity, allowing them to set sensitivity levels that
-distinguish stimuli from background noise or ambient light.
 
-\subsection{Event Capture and Analysis}
-
-The primary use of \texttt{bbtkv3} is the objective measurement of
-latencies. For example, a researcher might want to measure the delay
-between a TTL trigger sent by the experimental software and the actual
-appearance of a stimulus on the screen (detected by a photodiode).
-
-The \texttt{bbtk-capture} tool automates this process. It can be
-launched for a specific duration, during which it records all
-transitions on the 12 input lines (4 optical, 2 microphone, 2 TTL, and
-4 keypad inputs). All the user has to do is enter the commands shown in
-Listing~\ref{lst:capture} below.
-
-\begin{lstlisting}[language=bash, frame=none, numbers=none, caption={Example capture command}, label={lst:capture}, basicstyle=\ttfamily\small]
-# Capture for 60 seconds into session1-001*
-# (the serial port is located automatically)
-bbtk-capture -d 60 session1
-# analyse measurements
-events-stats session1-001-events.csv
+\begin{lstlisting}[language=bash, frame=none, float=*, numbers=none, caption={Example a recording session. First thresholds are sets, then a capture happens for 60s (option \texttt{-d 60)}, and finally, a html report is produced with \texttt{events-stats}}, label={lst:capture}, basicstyle=\ttfamily\small,escapeinside={(*@}{@*)}]
+	$ (*@ \textbf{bbtk-set-thresholds 80,0,0,0,110,0,0,0} @*)
+	Trying to open /dev/serial/by-id/usb-BBTK_BBTK_BBTK_V3_BBTKBBTKV3-if00-port0 at 115200 bps...
+	Getting current thresholds...
+	{Mic1:63 Mic2:63 Sounder1:63 Sounder2:63 Opto1:63 Opto2:63 Opto3:63 Opto4:63}
+	Setting new thresholds...: 
+	{Mic1:80 Mic2:0 Sounder1:0 Sounder2:0 Opto1:110 Opto2:0 Opto3:0 Opto4:0}
+	
+	$ (*@ \textbf{bbtk-capture -d 60 session1} @*) 	
+	Trying to open /dev/serial/by-id/usb-BBTK_BBTK_BBTK_V3_BBTKBBTKV3-if00-port0 at 115200 bps...
+	Setting smoothing mask (-s 1,1,0,0,1,1)...
+	{Mic1:true Mic2:true Opto4:false Opto3:false Opto2:true Opto1:true}
+	Getting thresholds...
+	{Mic1:80 Mic2:0 Sounder1:0 Sounder2:0 Opto1:110 Opto2:0 Opto3:0 Opto4:0}
+	Clearing Timing data... Ok
+	Capturing events (with DSCM) for 60 seconds... 
+	BBTK-CAPTURE-READY duration=60
+	[...]	
+	Raw Data saved to session1-001.dat
+	DSC Events saved to session1-001-dscevents.csv
+	Events saved to session1-001-events.csv
+	
+	$ (*@ \textbf{events-stats session1-001-events.csv} @*)
+	[...]
 \end{lstlisting}
 
-A practical difficulty is that the stimulus must begin \emph{after} the
-device has started recording and end \emph{before} the window closes,
-yet the instant at which recording begins cannot be predicted: it
-follows a fixed sequence of paced commands and an erasure of the
-device's internal memory whose duration depends on whether a full format
-or only an erase of the used sectors is required. Waiting a fixed amount
-of time is therefore unreliable. The suite offers two ways of
-synchronising on that instant instead. The simpler is to let
+
+The recording session starts by calibrating the sensor, setting their sensitivity thresholds at value adequate to
+distinguish stimuli from background noise or ambient light. The user can use the \texttt{bbtk-adjust-thresholds} command to open the interactive adjustment procedure on the Bbtk. Alternatively, the  \texttt{bbtk-get-thresholds} and 
+\texttt{bbtk-set-thresholds} allow him to directly modify the sensitivity thresholds from the command line. The smoothing parameters can also be set directly with \texttt{bbtk-set-smoothing}.
+
+
+Then the \texttt{bbtk-capture} is launched. For a specific duration, it records all transitions on the 12 input lines (4 optical, 2 microphone, 2 TTL, and4 keypad inputs). The transitions, and the associated  events are saved in ascii files which can be imported in a spreadsheet, a Python or R notebook for inspection. 
+
+To facilitate quick preview of the results, we provide a command-line tool,
+\texttt{events-stats}, which immediately outputs descriptive
+statistics and ASCII histograms about the timing data, and also writes
+a Markdown and an HTML report containing the same tables together with
+log-scale histograms and timeline plots as PNG figures. It computes a)
+\textbf{event durations}, that is, the distribution of how long each
+sensor remained active; b) \textbf{inter-onset intervals}, the timing
+regularity of successive events on a given sensor; c)
+\textbf{paired-event onset differences}, the latency between a
+reference event (e.g., TTL trigger) and a target event (e.g.,
+photodiode detection). Figure~\ref{fig:stats} shows an example of the
+output from a simple stimulation program (1 frame on --- 2 frames off)
+run on a Raspberry Pi 4.
+
+
+\subsection{Synchronizing the capture and the stimulation program} 
+
+When the same computer is running \texttt{bbtk-capture} and the stimulation program, it is possible to synchronize both programs.
+
+One solution is to let
 \texttt{bbtk-capture} start the stimulus itself: everything following a
-\texttt{--} separator on its command line is taken as the argument
-vector of a child process, launched at the exact moment the device
-begins to record, as in Listing~\ref{lst:sync}. No shell is interposed,
-so the stimulus keeps its own options unambiguously, and progress
-messages move to standard error so that standard output carries only the
-stimulus's own. A stimulus that exits with a non-zero status aborts the
-capture; one still running when the window closes is terminated, but the
-data are downloaded and saved regardless, since the window ran its full
-length and the recording is therefore valid.
+\texttt{-}\texttt{-} separator on its command line is taken as a child process, launched when the device
+begins to record, as in the Listing below: 
 
-\begin{lstlisting}[language=bash, frame=none, numbers=none, caption={Running a stimulus inside the capture window}, label={lst:sync}, basicstyle=\ttfamily\small]
-bbtk-capture -d 120 session1 -- ./my-stimulus -cycles 1000
+\begin{lstlisting}[language=bash, frame=none, numbers=none, basicstyle=\ttfamily\small]
+# ./runexp starts the stimulation
+bbtk-capture -d 120 session1 -- ./runexp
 \end{lstlisting}
 
-When the stimulus cannot be a child process --- because it is already
-running, because it is driven from another language, or because it
-executes on a different machine --- \texttt{bbtk-capture} prints the line
+When the stimulus cannot be a child process, \texttt{bbtk-capture} prints the line
 \texttt{BBTK-CAPTURE-READY duration=\textit{N}} on its standard output,
-on a line of its own, at the instant recording starts. An external
-driver launches the capture in the background, blocks until that line
-appears, and only then triggers the stimulus. Nothing earlier in the
-output identifies that instant, since the messages preceding it are
-emitted several seconds before the recording actually begins. A wrapper
-can confirm that the binary it is about to drive supports the marker
-before touching the device, because \texttt{bbtk-capture -V} advertises
-it.
+on a line of its own, at the instant recording starts. This can be intercepted by a script controlling the stimulation software. 
 
 At the end of the event capture, data are downloaded from the BBTK
 onto the host PC and saved for further analyses. Among the saved
@@ -225,47 +199,12 @@ and repeats \texttt{duration} elsewhere. Onsets need no such correction,
 since smoothing extends the trailing edge of a detection rather than
 delaying its onset.
 
-\subsection{Statistical Analysis}
 
-This CSV file can easily be imported in a spreadsheet, a Python or R
-notebook for inspection. Nevertheless, we provide a command-line tool,
-\texttt{events-stats}, which immediately outputs descriptive
-statistics and ASCII histograms about the timing data, and also writes
-a Markdown and an HTML report containing the same tables together with
-log-scale histograms and timeline plots as PNG figures. It computes a)
-\textbf{event durations}, that is, the distribution of how long each
-sensor remained active; b) \textbf{inter-onset intervals}, the timing
-regularity of successive events on a given sensor; c)
-\textbf{paired-event onset differences}, the latency between a
-reference event (e.g., TTL trigger) and a target event (e.g.,
-photodiode detection). Figure~\ref{fig:stats} shows an example of the
-output from a simple stimulation program (1 frame on --- 2 frames off)
-run on a Raspberry Pi 4.
 
-Two aspects of how these quantities are obtained bear on their
-interpretation. First, pairing is by \emph{nearest following} event: for
-each occurrence of the reference type, the tool locates the first event
-of each other type whose onset is not earlier, and reports the
-difference. The pairing is not exclusive, so two reference events
-occurring before the sensor responds are both paired with the same
-target, and a reference event with no subsequent event of a given type
-contributes nothing --- which is why the number of paired observations
-can fall short of the number of reference events. Second, the reported
-percentiles are computed after an optional outlier filter, enabled by
-default, which discards values lying more than 50~ms from the median of
-their own series; the threshold is set with \texttt{-detect-outliers}
-and disabled by passing zero. Excluded values are always listed in the
-output rather than silently dropped, so that the effect of the filter on
-any reported figure remains auditable. The filter is treated as
-inapplicable, and the series left untouched, when \emph{every} value
-would be excluded --- the normal situation for inter-onset intervals,
-whose spacing is set by the experimental design and is typically
-measured in seconds rather than milliseconds.
-
-  \begin{figure*}
-    % The arrow is rendered in a one-character-wide box so that the
-    % columns of the ASCII tables stay aligned.
-    \begin{lstlisting}[frame=none, numbers=none, basicstyle=\ttfamily\small, literate={→}{{\makebox[\widthof{x}][c]{$\scriptstyle\rightarrow$}}}1]
+\begin{lstlisting}[frame=none, numbers=none, float=*, basicstyle=\ttfamily\small, literate={→}{{\makebox[\widthof{x}][c]{$\scriptstyle\rightarrow$}}}1, caption={Print out of \texttt{events-stats} from a capture taken while
+ the stimulation computer presented 1000 cycles of 1 frame-on, 2     	frames-off. The display monitor refresh rate was fixed at 60Hz. The    	first section show the detected duration of the on-frames; note that    the BBTK adds 20ms to the duration measures because smoothing was     	set on Opto1. The second section reports on the SOA between     		successive on-frames. The last section display statistics about the     delay between Opto1 activation and a TTL signal that was sent just     	after the call to display flip. Note the 2-frames delay.}
+    	]
+    	
 === Duration Statistics (ms) ===
 
 Type    N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
@@ -323,94 +262,48 @@ TTLin1→Opto1  1000  31.0  39.0  39.0  39.2  39.2  39.5  39.8  8.8    0.5      
   [  38.000,   38.875) ms :    22
   [  38.875,   39.750) ms :   977  ****************************************
 \end{lstlisting}
-\caption{Print out of \texttt{events-stats} from a capture taken while
-  the stimulation computer presented 1000 cycles of 1 frame-on, 2
-  frames-off. The display monitor refresh rate was fixed at 60Hz. The
-  first section show the detected duration of the on-frames; note that
-  the BBTK adds 20ms to the duration measures because smoothing was
-  set on Opto1). The second section reports on the SOA between
-  successive on-frames. The last section display statistics about the
-  delay between Opto1 activation and a TTL signal that was sent just
-  after the call to display flip. Note the 2-frames delay.}
-\label{fig:stats}
-\end{figure*}
 
 
-\subsection{Interactive Usage}
 
-An interactive tool, \texttt{ibbtk}, allows the user to ``manually''
-send commands. This is useful for debugging and exploration of the
-device's capabilities. It maintains a persistent connection, avoiding
-the overhead of re-opening the serial port for each command.
 
-\subsection{Library}
+\subsection{Software Suite Components}
 
-Furthermore, because the entire suite is built upon a modular Go
-package, developers can easily integrate BBTK control directly into
+All the CLI tools provided by \texttt{bbtkv3}  are listed 
+Table~\ref{tab:tools}.  
+
+These tools build upon the Go module \texttt{github.com/chrplr/bbtkv3} which can be imported by developers who want to integrate BBTK control directly into
 their own Go-based experimental or analysis software, e.g.,
 \parencite{goxpyrepo}.
 
-\section{Validation}
-\label{sec:validation}
 
-A timing tool is only useful if its own measurements can be trusted. We
-therefore checked that the suite recovers an interval whose true value
-is known by construction. A stimulation program running on a Raspberry
-Pi~4 alternated one frame on and two frames off on a display refreshing
-at a nominal 60~Hz, so that successive stimulus onsets are separated by
-exactly three refresh intervals, i.e. $3 \times 1000/60 = 50.000$~ms.
-The program also emitted a TTL pulse immediately after each buffer swap.
-A single \texttt{bbtk-capture} run recorded 6000 cycles, and the onset
-asynchronies were computed with \texttt{events-stats}.
+\begin{table*}[ht]
+	\caption{The \texttt{bbtkv3} toolset}
+	\label{tab:tools}
+	\small
+	\begin{tabular}{@{}lp{0.7\textwidth}@{}}
+		\toprule
+		Tool & Description \\
+		\midrule
+		\texttt{bbtk-detect-port} & Scans serial ports to locate the connected BBTK. \\
+		\texttt{bbtk-capture} & Captures events for a specified duration and exports them to CSV and binary formats. \\
+		\texttt{bbtk-input-check} & Provides a live stream of sensor states for real-time validation. \\
+		\texttt{bbtk-adjust-thresholds} & Interactive menu for sensor sensitivity calibration. \\
+		\texttt{bbtk-get-thresholds} & Reads current sensor thresholds from the device. \\
+		\texttt{bbtk-set-thresholds} & Writes new threshold values to the device. \\
+		\texttt{bbtk-set-smoothing} & Enables or disables smoothing on individual sensor channels. \\
+		\texttt{bbtk-event-marking} & Configures the device for real-time event marking. \\
+		\texttt{bbtk-trigger-response} & Programs the device to answer a trigger on an input line with a delayed pulse on an output line, timed entirely in firmware. \\
+		\texttt{bbtk-send-command} & Sends raw protocol commands read from standard input and prints the device's replies. \\
+		\texttt{bbtk-send-break} & Sends the break character to interrupt a running device operation and recover a device left streaming. \\
+		\texttt{get-serial-port-list} & Lists the serial ports available on the host. \\
+		\texttt{events-stats} & Performs statistical analysis on captured timing data. \\
+		\texttt{ibbtk} & An interactive shell providing access to all device functions. \\
+		\bottomrule
+	\end{tabular}
+\end{table*}
 
-The measured stimulus onset asynchrony on the photodiode channel had a
-median of 50.000~ms, a mean of 49.986~ms and a standard deviation of
-0.182~ms, with all 5984 intervals falling between 49.250 and 50.500~ms.
-The TTL channel gave a median of 50.000~ms, a mean of 49.985~ms and a
-standard deviation of 0.155~ms over 5999 intervals. The suite therefore
-recovers the nominal interval exactly at the median, and the residual
-0.014~ms departure of the mean corresponds to a refresh rate of
-60.017~Hz rather than exactly 60~Hz --- a deviation of 0.03\%, which
-illustrates that the resolution of the measurement chain is fine enough
-to expose the difference between a monitor's nominal and actual refresh
-rate.
 
-% TODO: cross-validation against the vendor's Windows software.
-% The check above establishes that the suite recovers a known physical
-% interval; it does not establish agreement with the manufacturer's own
-% software, since we have no simultaneous recordings from it. Capturing
-% the same signal with both and reporting the agreement would close
-% this gap, and a reviewer is likely to ask for it.
 
-\section{Limitations}
-\label{sec:limitations}
-
-The suite implements the subset of the BBTK serial protocol
-\parencite{plant2016} needed to configure the device, to record from it,
-and to make it respond: the capture command, the input-check,
-event-marking and digital stimulus-response commands, and the commands
-that read and write sensor thresholds and the smoothing mask. Output is
-supported only in its \emph{reactive} form: \texttt{bbtk-trigger-response}
-can raise any of the eight output lines (two TTL outputs, four actuator
-closures and two sounders) a programmed delay after a trigger arrives on
-an input line, with the delay and the pulse width timed by the device's
-own firmware rather than by the host. What the suite does not provide is
-autonomous stimulus generation --- there is no way to make the device
-emit a sound or a pulse on a schedule of its own, independently of an
-input event. Users who need the BBTK to act as a free-running source
-must fall back on the vendor's software.
-
-Two further constraints are worth noting. First, the device is driven
-over a serial protocol whose command set is documented for the BBTK
-v2 \parencite{plant2016}; commands specific to later firmware are not
-covered. Second, when smoothing is enabled on an input line, the
-durations reported by the device for that line are inflated by
-approximately 20~ms, which must be subtracted before interpretation.
-\texttt{bbtk-capture} does this automatically in the
-\texttt{durationCorrected} column of its output, but the figure is a
-measurement made on a single device rather than a constant of the
-hardware, and laboratories needing a tighter bound should re-measure it
-on their own unit.
 
 \section{Implementation and Availability}
 \label{sec:availability}

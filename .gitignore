@@ -57,3 +57,6 @@ binaries/
 
 # Working notes, not part of the repository
 /paper/TODO.md
+
+# Digilent WaveForms SDK drops this wherever the process runs
+DebugErc.log
