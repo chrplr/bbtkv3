@@ -49,8 +49,8 @@
   device control and a statistical analysis tool that computes event
   durations, jitter, and latencies from captured data. Built in Go,
   the suite is distributed as self-contained binaries for Windows,
-  macOS, and Linux. The source code and a library for embedding BBTK
-  control in Go applications are available under the GPL-3.0 licence
+  macOS, and Linux. The suite is documented at \url{https://chrplr.github.io/bbtkv3} and its source code, and a library for embedding BBTK
+  control in Go applications, are available under the GPL-3.0 licence
   at \url{https://github.com/chrplr/bbtkv3}.%
 }
 
@@ -86,9 +86,9 @@ and TTL inputs/outputs connected to the stimulation device; c) A
 device with our software) driving the BBTK and recording the data (see
 Figure~\ref{fig:operation}).
 
-\begin{figure*}[ht]
+\begin{figure}[ht]
     \centering
-    \includegraphics[width=0.8\textwidth]{bbtk-setup.png}
+    \includegraphics[width=0.5\textwidth]{bbtk-setup.png}
     \caption{Principle of operation: The BBTK acts as an independent
       observer of the stimulation device's outputs. An optical
       sensor detects when the illumination of the screen reaches a
@@ -96,7 +96,7 @@ Figure~\ref{fig:operation}).
       the BBTK device during events capture runs on the stimulation
       computer.}
     \label{fig:operation}
-\end{figure*}
+\end{figure}
 
 The BBTK communicates with the host computer via a serial protocol
 described in the BBTK API guide \parencite{plant2016}. The
@@ -108,13 +108,6 @@ into automated testing workflows. One of its advantages is that the
 event capture can run simultaneously on the same computer that runs
 the stimulation.
 
-
-
-
-\section{Core Functionality}
-\label{sec:functionality}
-
-Listing~\ref{lst:capture} provides an example of a recording session. Three commands are used: bbtk-set-threshold, bbtk-capture and events-stats
 
 
 \begin{lstlisting}[language=bash, frame=none, float=*, numbers=none, caption={Example a recording session. First thresholds are sets, then a capture happens for 60s (option \texttt{-d 60)}, and finally, a html report is produced with \texttt{events-stats}}, label={lst:capture}, basicstyle=\ttfamily\small,escapeinside={(*@}{@*)}]
@@ -143,6 +136,11 @@ Listing~\ref{lst:capture} provides an example of a recording session. Three comm
 	[...]
 \end{lstlisting}
 
+\section{Core Functionality}
+\label{sec:functionality}
+
+Listing~\ref{lst:capture} provides an example of a recording session. Three commands are used: bbtk-set-threshold, bbtk-capture and events-stats
+
 
 The recording session starts by calibrating the sensor, setting their sensitivity thresholds at value adequate to
 distinguish stimuli from background noise or ambient light. The user can use the \texttt{bbtk-adjust-thresholds} command to open the interactive adjustment procedure on the Bbtk. Alternatively, the  \texttt{bbtk-get-thresholds} and 
@@ -150,6 +148,73 @@ distinguish stimuli from background noise or ambient light. The user can use the
 
 
 Then the \texttt{bbtk-capture} is launched. For a specific duration, it records all transitions on the 12 input lines (4 optical, 2 microphone, 2 TTL, and4 keypad inputs). The transitions, and the associated  events are saved in ascii files which can be imported in a spreadsheet, a Python or R notebook for inspection. 
+
+
+
+\begin{lstlisting}[frame=none, numbers=none, float=*, basicstyle=\ttfamily\small, label=stats, literate={→}{{\makebox[\widthof{x}][c]{$\scriptstyle\rightarrow$}}}1, caption={Print out of \texttt{events-stats} from a capture taken while
+		the stimulation computer presented 1000 cycles of 1 frame-on, 2     	frames-off. The display monitor refresh rate was fixed at 60Hz. The    	first section show the detected duration of the on-frames; note that    the BBTK adds 20ms to the duration measures because smoothing was     	set on Opto1. The second section reports on the SOA between     		successive on-frames. The last section display statistics about the     delay between Opto1 activation and a TTL signal that was sent just     	after the call to display flip. Note the 2-frames delay.}
+	]
+	
+	=== Duration Statistics (ms) ===
+	
+	Type    N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
+	----    -     ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
+	Opto1   1000  36.5  37.0  37.0  37.2  37.2  37.5  37.8  1.2    0.5      37.2  0.20
+	
+	Opto1:
+	histogram (10 bins):
+	[  36.500,   36.625) ms :     2
+	[  36.625,   36.750) ms :     0
+	[  36.750,   36.875) ms :    28  **
+	[  36.875,   37.000) ms :     0
+	[  37.000,   37.125) ms :   283  *************************
+	[  37.125,   37.250) ms :     0
+	[  37.250,   37.375) ms :   449  ****************************************
+	[  37.375,   37.500) ms :     0
+	[  37.500,   37.625) ms :   229  ********************
+	[  37.625,   37.750) ms :     9
+	
+	=== Inter-Onset Interval / Jitter Statistics (ms) ===
+	
+	Type    N    Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
+	----    -    ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
+	Opto1   999  49.2  49.8  49.8  50.0  50.0  50.2  50.5  1.2    0.5      50.0  0.19
+	
+	Opto1:
+	histogram (10 bins):
+	[  49.250,   49.375) ms :     1
+	[  49.375,   49.500) ms :     0
+	[  49.500,   49.625) ms :    13  *
+	[  49.625,   49.750) ms :     0
+	[  49.750,   49.875) ms :   270  **********************
+	[  49.875,   50.000) ms :     0
+	[  50.000,   50.125) ms :   481  ****************************************
+	[  50.125,   50.250) ms :     0
+	[  50.250,   50.375) ms :   227  ******************
+	[  50.375,   50.500) ms :     7
+	
+	=== Paired-Event Onset Differences relative to TTLin1 (ms) ===
+	
+	Type          N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
+	----          -     ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
+	TTLin1→Opto1  1000  31.0  39.0  39.0  39.2  39.2  39.5  39.8  8.8    0.5      39.2  0.32
+	
+	TTLin1→Opto1:
+	histogram (10 bins):
+	[  31.000,   31.875) ms :     1
+	[  31.875,   32.750) ms :     0
+	[  32.750,   33.625) ms :     0
+	[  33.625,   34.500) ms :     0
+	[  34.500,   35.375) ms :     0
+	[  35.375,   36.250) ms :     0
+	[  36.250,   37.125) ms :     0
+	[  37.125,   38.000) ms :     0
+	[  38.000,   38.875) ms :    22
+	[  38.875,   39.750) ms :   977  ****************************************
+\end{lstlisting}
+
+
+
 
 To facilitate quick preview of the results, we provide a command-line tool,
 \texttt{events-stats}, which immediately outputs descriptive
@@ -161,7 +226,7 @@ sensor remained active; b) \textbf{inter-onset intervals}, the timing
 regularity of successive events on a given sensor; c)
 \textbf{paired-event onset differences}, the latency between a
 reference event (e.g., TTL trigger) and a target event (e.g.,
-photodiode detection). Figure~\ref{fig:stats} shows an example of the
+photodiode detection). Listing~\ref{stats} shows an example of the
 output from a simple stimulation program (1 frame on --- 2 frames off)
 run on a Raspberry Pi 4.
 
@@ -198,71 +263,6 @@ channels for which smoothing was actually enabled during the capture,
 and repeats \texttt{duration} elsewhere. Onsets need no such correction,
 since smoothing extends the trailing edge of a detection rather than
 delaying its onset.
-
-
-
-\begin{lstlisting}[frame=none, numbers=none, float=*, basicstyle=\ttfamily\small, literate={→}{{\makebox[\widthof{x}][c]{$\scriptstyle\rightarrow$}}}1, caption={Print out of \texttt{events-stats} from a capture taken while
- the stimulation computer presented 1000 cycles of 1 frame-on, 2     	frames-off. The display monitor refresh rate was fixed at 60Hz. The    	first section show the detected duration of the on-frames; note that    the BBTK adds 20ms to the duration measures because smoothing was     	set on Opto1. The second section reports on the SOA between     		successive on-frames. The last section display statistics about the     delay between Opto1 activation and a TTL signal that was sent just     	after the call to display flip. Note the 2-frames delay.}
-    	]
-    	
-=== Duration Statistics (ms) ===
-
-Type    N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
-----    -     ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
-Opto1   1000  36.5  37.0  37.0  37.2  37.2  37.5  37.8  1.2    0.5      37.2  0.20
-
-  Opto1:
-  histogram (10 bins):
-  [  36.500,   36.625) ms :     2
-  [  36.625,   36.750) ms :     0
-  [  36.750,   36.875) ms :    28  **
-  [  36.875,   37.000) ms :     0
-  [  37.000,   37.125) ms :   283  *************************
-  [  37.125,   37.250) ms :     0
-  [  37.250,   37.375) ms :   449  ****************************************
-  [  37.375,   37.500) ms :     0
-  [  37.500,   37.625) ms :   229  ********************
-  [  37.625,   37.750) ms :     9
-
-=== Inter-Onset Interval / Jitter Statistics (ms) ===
-
-Type    N    Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
-----    -    ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
-Opto1   999  49.2  49.8  49.8  50.0  50.0  50.2  50.5  1.2    0.5      50.0  0.19
-
-  Opto1:
-  histogram (10 bins):
-  [  49.250,   49.375) ms :     1
-  [  49.375,   49.500) ms :     0
-  [  49.500,   49.625) ms :    13  *
-  [  49.625,   49.750) ms :     0
-  [  49.750,   49.875) ms :   270  **********************
-  [  49.875,   50.000) ms :     0
-  [  50.000,   50.125) ms :   481  ****************************************
-  [  50.125,   50.250) ms :     0
-  [  50.250,   50.375) ms :   227  ******************
-  [  50.375,   50.500) ms :     7
-
-=== Paired-Event Onset Differences relative to TTLin1 (ms) ===
-
-Type          N     Min   P5    P25   P50   P75   P95   Max   Range  P95-P05  Mean  SD
-----          -     ---   --    ---   ---   ---   ---   ---   -----  -------  ----  --
-TTLin1→Opto1  1000  31.0  39.0  39.0  39.2  39.2  39.5  39.8  8.8    0.5      39.2  0.32
-
-  TTLin1→Opto1:
-  histogram (10 bins):
-  [  31.000,   31.875) ms :     1
-  [  31.875,   32.750) ms :     0
-  [  32.750,   33.625) ms :     0
-  [  33.625,   34.500) ms :     0
-  [  34.500,   35.375) ms :     0
-  [  35.375,   36.250) ms :     0
-  [  36.250,   37.125) ms :     0
-  [  37.125,   38.000) ms :     0
-  [  38.000,   38.875) ms :    22
-  [  38.875,   39.750) ms :   977  ****************************************
-\end{lstlisting}
-
 
 
 
