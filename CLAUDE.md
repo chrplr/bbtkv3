@@ -89,13 +89,13 @@ Two asymmetries to preserve when touching this:
   1. `-p <port>` on the command line.
   2. `BBTK_PORT` (read via `bbtkv3.GetPortFromEnv()`).
   3. The udev symlink matching `/dev/serial/by-id/*BBTK*`, derived from the device's USB descriptors and therefore stable across replugs and power cycles, unlike `/dev/ttyUSBn`. Linux only — the glob matches nothing on macOS and Windows.
-  4. A per-tool fallback, which differs between tools:
-     - `/dev/ttyUSB0`: `bbtk-capture`, `bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds`, `bbtk-set-smoothing`.
-     - Exit with an error: `ibbtk`, `bbtk-send-command`, `bbtk-input-check`, `bbtk-event-marking`, `bbtk-send-break`.
+  4. `bbtkv3.DetectPort()`: a scan of every port `AvailablePorts()` reports — open, write `CONN`, keep what answers `BBTK;` — run in parallel, one second per silent port, announced on stderr. It is last because it writes to every serial port on the machine. `AvailablePorts()` is `serial.GetPortsList()` minus the `/dev/tty.*` half of macOS's call-in/call-out pairs, which block on open and are the wrong name to hand back.
 
-  On macOS and Windows, step 3 never fires, so the tools reach step 4: set `BBTK_PORT` (or pass `-p`) to `/dev/cu.usbserial-*` resp. `COMn`. `bbtk-detect-port` finds either.
+  When all four fail, every device tool exits with `no serial port specified: use -p <port> or set BBTK_PORT`. There is no built-in device-name default; `/dev/ttyUSB0` used to be one for five of the tools, and on macOS that meant they failed while `bbtk-detect-port` worked.
 
-  `bbtkv3.StablePortName()` is the inverse of step 3: given a `/dev/ttyUSBn` name it returns the by-id symlink pointing at it. `bbtk-detect-port` uses it to report the stable name for the port it found by scanning; it returns its argument unchanged when there is no `/dev/serial/by-id`.
+  `bbtk-detect-port` is step 4 made explicit, over the ports named on its command line or all of them, reporting every BBTK rather than the first. Keep the probe itself in `ScanForBBTK`/`probeBBTK` — one CONN implementation, shared by the tool and the fallback.
+
+  `bbtkv3.StablePortName()` is the inverse of step 3: given a `/dev/ttyUSBn` name it returns the by-id symlink pointing at it. `bbtk-detect-port` and `DetectPort()` both use it, so a scan reports and returns the stable name; it returns its argument unchanged when there is no `/dev/serial/by-id`.
 
   (`bbtk-detect-port`, `get-serial-port-list` and `events-stats` take no `-p` and ignore `BBTK_PORT`.)
 - `DEBUG` — Enable debug logging

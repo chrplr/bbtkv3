@@ -13,7 +13,7 @@
 //   bbtk-capture [options] <basefilename> [-- command [args...]]
 //
 //   -p string
-//         device (serial port name) (default "/dev/ttyUSB0")
+//         device (serial port name); overrides BBTK_PORT (default: autodetect)
 //   -b int
 //         baudrate (speed in bps) (default 115200)
 //   -d int
@@ -67,10 +67,9 @@ var (
 )
 
 var (
-	PortAddress = "/dev/ttyUSB0"
-	Baudrate    = 115200
-	Duration    = 30
-	DEBUG       = false
+	Baudrate = 115200
+	Duration = 30
+	DEBUG    = false
 )
 
 // DefaultSmoothingMask is what -s uses when it is not given: smoothing on both
@@ -84,7 +83,7 @@ const DefaultSmoothingMask = "1,1,0,0,1,1"
 
 func main() {
 
-	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default \""+PortAddress+"\")")
+	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default: autodetect)")
 	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
 	durationPtr := flag.Int("d", Duration, "duration of capture (in s)")
 	debugPtr := flag.Bool("D", DEBUG, "Debug mode")
@@ -144,14 +143,14 @@ func main() {
 		log.Fatalf("Error parsing smoothing mask %q: %v\n(expected six 0/1 values: mic1,mic2,opto4,opto3,opto2,opto1)\n", *smoothingPtr, err)
 	}
 
-	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
-	// /dev/serial/by-id symlink (Linux only), then the built-in default.
+	// Port resolution, highest precedence first: -p, then BBTK_PORT, then
+	// autodetection (the /dev/serial/by-id symlink on Linux, else a scan).
 	serPort := *portPtr
 	if serPort == "" {
 		serPort = bbtkv3.ResolvePort()
 	}
 	if serPort == "" {
-		serPort = PortAddress
+		log.Fatal("no serial port specified: use -p <port> or set BBTK_PORT")
 	}
 
 	// Initialisation

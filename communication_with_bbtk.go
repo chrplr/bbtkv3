@@ -13,7 +13,9 @@ import (
 
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"go.bug.st/serial"
@@ -80,31 +82,156 @@ func GetPortFromEnv() string {
 // without /dev/serial/by-id the glob simply matches nothing.
 const bbtkByIDGlob = "/dev/serial/by-id/*BBTK*"
 
+// DefaultBaudrate is the speed the BBTKv3 talks at.
+const DefaultBaudrate = 115200
+
 // ResolvePort returns the serial port to talk to, or "" if it cannot tell.
 //
-// Order: BBTK_PORT, then the by-id symlink. The latter is derived from the
-// device's USB descriptors, so unlike /dev/ttyUSBn — which is handed out in
-// enumeration order — it survives replugging and power-cycling the box. That
-// matters in practice: numbering shifts exactly when you have just rebooted a
-// wedged device and least want to go hunting for its new name.
+// Order: BBTK_PORT, the by-id symlink, then a scan of every serial port
+// (DetectPort). Callers put -p ahead of all three.
 //
-// Preferred over scanning (as bbtk-detect-port does), which has to open every
-// serial port and send CONN to it, disturbing whatever else is attached.
-//
-// Callers keep their own final fallback, so behaviour is unchanged when neither
-// source yields anything.
+// The by-id symlink is derived from the device's USB descriptors, so unlike
+// /dev/ttyUSBn — which is handed out in enumeration order — it survives
+// replugging and power-cycling the box. That matters in practice: numbering
+// shifts exactly when you have just rebooted a wedged device and least want to
+// go hunting for its new name. It is also free, which is why it is tried before
+// scanning; but it exists on Linux only, which is why scanning has to follow.
 func ResolvePort() string {
 	if p := GetPortFromEnv(); p != "" {
 		return p
 	}
 	matches, err := filepath.Glob(bbtkByIDGlob)
-	if err != nil || len(matches) == 0 {
+	if err == nil && len(matches) > 0 {
+		if len(matches) > 1 && verbose {
+			fmt.Fprintf(ProgressWriter(), "note: %d BBTK devices found, using %s\n", len(matches), matches[0])
+		}
+		return matches[0]
+	}
+	return DetectPort()
+}
+
+// AvailablePorts returns the serial ports worth probing for a BBTK.
+//
+// It is serial.GetPortsList() everywhere but macOS, which exposes each serial
+// device twice: /dev/tty.foo, the call-in device, whose open blocks until
+// carrier appears, and /dev/cu.foo, the call-out device, which is the one to
+// hand to the tools. Probing both would send CONN to the same box twice and
+// could report a name that then fails to open.
+func AvailablePorts() ([]string, error) {
+	ports, err := serial.GetPortsList()
+	if err != nil {
+		return nil, err
+	}
+	if runtime.GOOS != "darwin" {
+		return ports, nil
+	}
+	out := make([]string, 0, len(ports))
+	for _, p := range ports {
+		if strings.HasPrefix(p, "/dev/tty.") {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// probeBBTK opens portName and asks it, by CONN, whether it is a BBTK.
+func probeBBTK(portName string, baudrate int, verbose bool) bool {
+	mode := &serial.Mode{
+		BaudRate: baudrate,
+		Parity:   serial.NoParity,
+		DataBits: 8,
+		StopBits: serial.OneStopBit,
+	}
+
+	p, err := serial.Open(portName, mode)
+	if err != nil {
+		if verbose {
+			fmt.Fprintf(ProgressWriter(), "Error while trying to open %s at %d bps: %v\n", portName, baudrate, err)
+		}
+		return false
+	}
+	defer p.Close()
+
+	if err := p.SetReadTimeout(time.Second); err != nil {
+		return false
+	}
+	if _, err := p.Write([]byte("CONN\r\n")); err != nil {
+		return false
+	}
+
+	// Read until the port falls silent for a second rather than stopping at the
+	// first chunk: the reply can arrive split, and a box mid-stream may have
+	// other output queued ahead of it.
+	var resp strings.Builder
+	buf := make([]byte, 100)
+	for {
+		n, err := p.Read(buf)
+		if err != nil {
+			return false
+		}
+		if n == 0 { // timeout
+			break
+		}
+		resp.Write(buf[:n])
+	}
+	if DEBUG {
+		log.Printf("probeBBTK: %s answered %q", portName, resp.String())
+	}
+	return strings.Contains(resp.String(), "BBTK;")
+}
+
+// ScanForBBTK probes the given ports in parallel and returns those that answer
+// CONN like a BBTK, in the order they were given. verbose reports the ports it
+// could not open.
+//
+// Note that this writes to every port named, so it disturbs whatever else is
+// attached — which is why ResolvePort tries the cheap, targeted sources first.
+func ScanForBBTK(ports []string, baudrate int, verbose bool) []string {
+	found := make([]bool, len(ports))
+	var wg sync.WaitGroup
+	for i, p := range ports {
+		wg.Add(1)
+		go func(i int, p string) {
+			defer wg.Done()
+			found[i] = probeBBTK(p, baudrate, verbose)
+		}(i, p)
+	}
+	wg.Wait()
+
+	var out []string
+	for i, ok := range found {
+		if ok {
+			out = append(out, ports[i])
+		}
+	}
+	return out
+}
+
+// DetectPort scans every available serial port for a BBTK and returns the first
+// one that answers, "" if none does. This is the last resort of ResolvePort: it
+// is the only source that works on macOS and Windows without configuration, and
+// the only one that costs a write to every serial port on the machine. It says
+// on stderr what it is doing, so an unexpected scan is visible.
+func DetectPort() string {
+	ports, err := AvailablePorts()
+	if err != nil || len(ports) == 0 {
 		return ""
 	}
-	if len(matches) > 1 && verbose {
-		fmt.Fprintf(ProgressWriter(), "note: %d BBTK devices found, using %s\n", len(matches), matches[0])
+	fmt.Fprintf(os.Stderr, "No serial port given; scanning %v for a BBTK...\n", ports)
+	found := ScanForBBTK(ports, DefaultBaudrate, DEBUG)
+	if len(found) == 0 {
+		fmt.Fprintln(os.Stderr, "No BBTK found.")
+		return ""
 	}
-	return matches[0]
+	if len(found) > 1 {
+		fmt.Fprintf(os.Stderr, "note: %d BBTK devices found (%v), using %s\n", len(found), found, found[0])
+	}
+	// Report and use the stable name when there is one, for the same reason
+	// ResolvePort prefers it.
+	port := StablePortName(found[0])
+	fmt.Fprintf(os.Stderr, "BBTK found at %s\n", port)
+	return port
 }
 
 // StablePortName returns the /dev/serial/by-id symlink pointing at dev, or dev

@@ -14,7 +14,7 @@
 //	bbtk-set-thresholds [options] <mic1,mic2,sounder1,sounder2,opto1,opto2,opto3,opto4>
 //
 //	-p string
-//	      device (serial port name); overrides BBTK_PORT (default "/dev/ttyUSB0")
+//	      device (serial port name); overrides BBTK_PORT (default: autodetect)
 //	-b int
 //	      baudrate (speed in bps) (default 115200)
 //	-V
@@ -43,8 +43,7 @@ var (
 )
 
 var (
-	PortAddress = "/dev/ttyUSB0"
-	Baudrate    = 115200
+	Baudrate = 115200
 )
 
 func myUsage() {
@@ -55,7 +54,7 @@ func myUsage() {
 
 func main() {
 	flag.Usage = myUsage
-	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default \""+PortAddress+"\")")
+	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default: autodetect)")
 	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
 	versionPtr := flag.Bool("V", false, "Display version")
 
@@ -66,14 +65,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
-	// /dev/serial/by-id symlink (Linux only), then the built-in default.
+	// Port resolution, highest precedence first: -p, then BBTK_PORT, then
+	// autodetection (the /dev/serial/by-id symlink on Linux, else a scan).
 	serPort := *portPtr
 	if serPort == "" {
 		serPort = bbtkv3.ResolvePort()
 	}
 	if serPort == "" {
-		serPort = PortAddress
+		log.Fatal("no serial port specified: use -p <port> or set BBTK_PORT")
 	}
 
 	newthresholds := flag.Arg(0)

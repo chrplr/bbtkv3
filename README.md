@@ -135,11 +135,11 @@ which launches a 2-min acquisition with output files named `session1-001.dat`,
 is incremented automatically (`-001`, `-002`, …) so previous recordings are
 never overwritten.
 
-On Linux you do not normally have to say which serial port the device is on:
-every tool finds it by itself through the `/dev/serial/by-id/*BBTK*` symlink.
-`bbtk-detect-port` is there for the cases where that does not apply — macOS and
-Windows, which have no `/dev/serial/by-id`, or a box that is not being found —
-and you only need it once, to learn the name to put in `BBTK_PORT`:
+You do not normally have to say which serial port the device is on: every tool
+finds it by itself, through the `/dev/serial/by-id/*BBTK*` symlink on Linux and,
+failing that, by scanning the serial ports. `bbtk-detect-port` runs that scan on
+its own, which you need only if you would rather name the port once and skip the
+scan on every command:
 
 ```bash
 $ bbtk-detect-port
@@ -151,10 +151,10 @@ $ bbtk-capture -d 120 session1
 ...
 ```
 
-Note that it identifies the device by opening every serial port and sending
-`CONN`, so it disturbs whatever else is attached; give it a port list
-(`bbtk-detect-port COM3 COM4`) to narrow the scan. See *Selecting the serial
-port* below.
+Note that the scan identifies the device by opening every serial port and
+sending `CONN`, so it disturbs whatever else is attached; give `bbtk-detect-port`
+a port list (`bbtk-detect-port COM3 COM4`) to narrow it, and set `BBTK_PORT` to
+stop the other tools from scanning at all. See *Selecting the serial port* below.
 
 
 ```bash
@@ -175,7 +175,7 @@ Options:
   -no-countdown
     	Disable second-by-second countdown display
   -p string
-    	device (serial port name); overrides BBTK_PORT (default "/dev/ttyUSB0")
+    	device (serial port name); overrides BBTK_PORT (default: autodetect)
   -s string
     	smoothing mask: six 0/1 values, mic1,mic2,opto4,opto3,opto2,opto1 (default "1,1,0,0,1,1")
 
@@ -345,8 +345,18 @@ be repeated from the start.
 
 ## Selecting the serial port
 
-Every tool resolves the port in this order: the `-p` flag, then `BBTK_PORT`, then
-the udev by-id symlink `/dev/serial/by-id/*BBTK*`, then its own built-in default.
+Every tool resolves the port in this order:
+
+1. the `-p` flag,
+2. `BBTK_PORT`,
+3. autodetection.
+
+Autodetection tries the udev by-id symlink `/dev/serial/by-id/*BBTK*` first, and
+falls back to scanning: opening every serial port, sending `CONN`, and taking
+the one that answers `BBTK;`. Scanning is last because it writes to every serial
+port on the machine, disturbing whatever else is attached; it announces itself on
+stderr, so an unexpected scan is visible. A silent port costs one second, and the
+ports are probed in parallel.
 
 The by-id name is derived from the device's USB descriptors, so — unlike
 `/dev/ttyUSBn`, which is handed out in enumeration order — it survives replugging
@@ -354,9 +364,8 @@ and power-cycling. In practice the numbering shifts exactly when you have just
 rebooted a wedged box and least want to hunt for its new name, so leaving `-p`
 and `BBTK_PORT` unset is usually the most reliable option on Linux.
 
-`bbtk-detect-port` remains available and works anywhere, but it identifies the
-device by opening every serial port and sending `CONN`, which disturbs whatever
-else is attached.
+`bbtk-detect-port` runs the same scan explicitly, over the ports you name or
+over all of them, and reports every BBTK it finds rather than just the first.
 
 `BBTK_PORT` can be set once per session, and is used by every tool that takes
 `-p`:
@@ -368,17 +377,20 @@ set BBTK_PORT=COM4                     # Windows (cmd)
 ```
 
 The by-id step is Linux-only — `/dev/serial/by-id` is a udev creation, so on
-macOS and Windows the tools fall straight through to their built-in default. On
-macOS the FTDI serial number is already part of the device name
-(`/dev/cu.usbserial-…`, and note `cu.` rather than `tty.`, which blocks on open
-waiting for DCD); on Windows the driver keeps a given box on the same `COMn`.
-Set `BBTK_PORT` accordingly there.
+macOS and Windows autodetection means the scan. That works without configuration,
+but setting `BBTK_PORT` avoids probing the other serial devices on the machine.
+On macOS the FTDI serial number is already part of the device name
+(`/dev/cu.usbserial-…`); the scan skips the `/dev/tty.*` twins, which block on
+open waiting for DCD and are not the device to talk to anyway. On Windows the
+driver keeps a given box on the same `COMn`.
 
-When nothing at all resolves, the tools differ: `bbtk-capture`,
-`bbtk-get-thresholds`, `bbtk-set-thresholds`, `bbtk-adjust-thresholds` and
-`bbtk-set-smoothing` try `/dev/ttyUSB0`, while `ibbtk`, `bbtk-send-command`,
-`bbtk-input-check`, `bbtk-event-marking`, `bbtk-trigger-response` and
-`bbtk-send-break` stop with an error.
+When nothing resolves — no `-p`, no `BBTK_PORT`, no symlink, and no port
+answering the scan — every tool stops with the same error rather than guessing a
+device name:
+
+```
+no serial port specified: use -p <port> or set BBTK_PORT
+```
 
 
 
@@ -510,7 +522,7 @@ ibbtk -p COM4                 # Windows
 ibbtk -p /dev/cu.usbserial-BBTKXXXX   # macOS
 ```
 
-`-p` can be omitted whenever the port resolves on its own — on Linux it normally does, via the by-id symlink; elsewhere set `BBTK_PORT`. See *Selecting the serial port* above. Unlike `bbtk-capture`, `ibbtk` has no built-in fallback: if nothing resolves it stops with an error rather than guessing `/dev/ttyUSB0`.
+`-p` can be omitted whenever the port resolves on its own — on Linux it normally does, via the by-id symlink; elsewhere the tools scan for the box, or you can set `BBTK_PORT` to skip the scan. See *Selecting the serial port* above.
 
 ```
 Options:

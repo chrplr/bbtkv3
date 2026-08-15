@@ -41,8 +41,7 @@ var (
 )
 
 var (
-	PortAddress = "/dev/ttyUSB0"
-	Baudrate    = 115200
+	Baudrate = 115200
 )
 
 func myUsage() {
@@ -81,7 +80,7 @@ Options:
 
 func main() {
 	flag.Usage = myUsage
-	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default \""+PortAddress+"\")")
+	portPtr := flag.String("p", "", "device (serial port name); overrides BBTK_PORT (default: autodetect)")
 	speedPtr := flag.Int("b", Baudrate, "baudrate (speed in bps)")
 	versionPtr := flag.Bool("V", false, "Display version")
 
@@ -103,14 +102,14 @@ func main() {
 		log.Fatalf("Error parsing smoothing mask %q: %v\n", maskArg, err)
 	}
 
-	// Port resolution, highest precedence first: -p, then BBTK_PORT, then the
-	// /dev/serial/by-id symlink (Linux only), then the built-in default.
+	// Port resolution, highest precedence first: -p, then BBTK_PORT, then
+	// autodetection (the /dev/serial/by-id symlink on Linux, else a scan).
 	serPort := *portPtr
 	if serPort == "" {
 		serPort = bbtkv3.ResolvePort()
 	}
 	if serPort == "" {
-		serPort = PortAddress
+		log.Fatal("no serial port specified: use -p <port> or set BBTK_PORT")
 	}
 
 	// Initialisation
