@@ -231,7 +231,31 @@ output from a simple stimulation program (1 frame on --- 2 frames off)
 run on a Raspberry Pi 4.
 
 
-\subsection{Synchronizing the capture and the stimulation program} 
+\subsection{Selecting the serial port}
+
+None of the commands in Listing~\ref{lst:capture} states which serial
+port the BBTK is attached to. Every tool that talks to the device
+resolves the port by itself, in three steps: a) the \texttt{-p}
+option, when one is given on the command line; b) the environment
+variable \texttt{BBTK\_PORT}; c) autodetection.
+
+Autodetection first looks for the udev symlink
+\texttt{/dev/serial/by-id/*BBTK*} --- the name printed in
+Listing~\ref{lst:capture}. Linux derives it from the USB descriptors
+of the device, so, unlike \texttt{/dev/ttyUSB\textit{n}}, which is
+assigned in enumeration order, it survives replugging and power
+cycling; the numbering otherwise changes precisely when one has just
+restarted an unresponsive device. As no such directory exists on macOS
+and Windows, the tools then fall back on scanning: every available
+serial port is opened and sent the \texttt{CONN} command, and the port
+answering \texttt{BBTK;} is retained. Scanning therefore writes to all
+serial ports of the host, and may disturb other instruments attached
+to it; exporting \texttt{BBTK\_PORT} once per session avoids this. The
+value to use can be obtained from \texttt{bbtk-detect-port}, which
+performs the same scan on demand and reports the ports at which a BBTK
+answered.
+
+\subsection{Synchronizing the capture and the stimulation program}
 
 When the same computer is running \texttt{bbtk-capture} and the stimulation program, it is possible to synchronize both programs.
 
